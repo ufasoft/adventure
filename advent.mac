@@ -1,0 +1,2061 @@
+;;; Copyright (c) 2025 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com
+;;;
+;;; SPDX-License-Identifier: MIT
+;;;
+
+;; Remake of
+;; Colossal Cave Adventure
+.TITLE	ADVENT
+
+
+.REM	&
+	Modified by 	Kent Blackett
+             		Engineering Systems Group
+             		Digital Equipment Corp.
+        	     	15-Jul-77
+	Modified by	Bob Supnik
+			Disk Engineering
+			21-Oct-77
+	Modified by	Bob Supnik
+			Disk Engineering
+			25-Aug-78
+	Modified by	Bob Supnik
+			small systems
+			12-Nov-78
+	Rewritten by	Sergey Pavlov
+			Ufasoft
+			30-Mar-2025
+
+	Original version was for DECSYSTEM-10
+	Next version was for FORTRAN IV-PLUS under the IAS Operating System on the PDP-11/70
+	Next version is for FORTRAN IV (V01C or later) under RT-11 on *any* PDP-11
+	This version is for MACRO-11 for PDP-11 with < 32KiB RAM (Soviet home computer BK-0010)
+&
+
+.INCLUDE /macros.inc/
+
+
+.ASECT
+. = 0
+	.WORD	^o764, IMGEND - 4.
+	BR	. + ^o14
+	.WORD	^o1000, ^o1000, ^o1000, ^o1000, ^o1000
+.DSABL	AMA
+	JSR	R5, STAR10
+.ENABL	AMA
+
+
+.IF NE C$RT11
+	.	= $USRSP
+	.WORD	ASTKUP
+
+.	= $JSW
+;	.WORD	TTLC$ + CHNIF$ 	; Disables automatic conversion of to uppercase characters. Pass empty Command Line to KMON
+;	.WORD	^o100000
+;	.WORD	^o120000
+
+
+	. = ^o1000
+.IFF
+	. = ^o764
+	RETADR:	BR	$START					; in case if autorun does not work (loaded on BK-0011)
+		.WORD	$START, $START, $START, $START, $START	; return addresses for auto-run, don't use label becase this code is relocatable
+.ENDC
+
+.RADIX	10.
+
+$START:	JMP	INIT
+
+
+
+
+
+L6021:	CMPB	ODLOC + 5, (R2)
+	BEQ	L6030B			; ODLOC(6) == DLOC(6)
+	.PCT	80, L6030B
+	.RSPEAK	127			; There are faint rustling noises from the darkness behind you
+	BR	L6030B
+
+L6012:
+6012$:	CMPB	(R5)+, #B.MOVE + 1
+	BHI	6012$		; Skip the rest moves
+	.RCOND
+	BEQ	L6016		; End of Travel-table entry
+	R2.HI	$CALL1-1, 6012$
+	R2.LO	15, 6012$
+	CMPB	R2, ODLOC-1(R3)
+	BEQ	6012$
+	CMPB	R2, -1(R4)
+	BEQ	6012$
+	CMPB	R2, DLOC-1(R3)
+	BEQ	6012$
+	CMP	R1, #$UCND * 256
+	BEQ	4$
+	.FORCE
+	BCS	6012$
+	CMP	R3, #6
+	BNE	4$
+	.NOPIR
+	BEQ	6012$
+4$:	MOVB	R2, (R4)+
+	BR	6012$
+
+
+;; PIRATE won't take PYRAMID from Plover Room or Dark Room (too easy!).
+
+L60161: CLR	R0			; K
+	MOV	#B.OBJ + FSTTRS, R1
+3$:	R1.NE	PYRAM, 1$
+	L.EQ	101, 2$		; Origin of PYRAMID
+	L.EQ	100, 2$		; Origin of EMERALD
+1$:	.TOT	-1, L6022
+2$:	N.HERE	-1, 6019$
+	INC	R0			; ++K
+6019$:	INC	R1
+	R1.LO	B.OBJ+MAXTRS+1, 3$
+	TST	R0
+	BNE	L6021
+	MOVB	TALLY, R0
+	SUB	(PC)+, R0
+TALLY2:	.WORD	0			; Counts how many can never be found (e.g. if lost BIRD or BRIDGE)
+	SOB	R0, L6021
+					; TALLY == TALLY2+1
+	IF.NE	O.CHEST, L6021
+	N.HERE	LAMP, L6021
+	N.PRP1	LAMP, L6021
+L6025:	.RSPEAK	186			; Pirate: "I'd best hie meself off to the maze to hide me chest"
+	.MOVE	CHEST, CHLOC
+	.MOVE	MESSAG, CHLOC2
+L6024:	MOVB	#CHLOC, (R2)		; Pirates's DLOC
+	MOVB	#CHLOC, ODLOC + 5
+	CLRB	DSEEN + 5
+L6030B:	JMP	L6030C	;!!!O
+
+
+
+L6022:	.RSPEAK	128		; Out from the shadows behind you pounces a bearded pirate!  "Har, har,"
+;; Don't steal chest back from troll!
+	IF.NE	O.MSG, 3$
+	.MOVE	CHEST, CHLOC
+3$:	.MOVE	MESSAG, CHLOC2
+	MOV	#B.OBJ + FSTTRS, R1
+60222$:	MOV	R1, OBJ
+	R1.NE	PYRAM, 60225$
+	L.EQ	101, 6023$		; Origin of PYRAMID
+	L.EQ	100, 6023$		; Origin of EMERALD
+60225$:	N.AT	, 60226$
+	TSTB	FIXED-1-B.OBJ(R1)
+	BNE	60226$
+	.CARRY
+60226$:	TOT.DRO	0, CHLOC
+6023$:	INC	R1
+	R1.EQ	B.OBJ+MAXTRS+1, L6024
+	BR	60222$
+
+
+
+
+;; Dwarf motion
+;; R3: #Dwarf
+DWRMOT:	MOV	#$BUF, R4
+	CLRB	(R4)+
+	.KEY
+	BPL	L6012
+L6016:	MOVB	ODLOC-1(R3), (R4)+	; Back is the only way
+	SUB	#$BUF+2, R4		; R4: number of possible motions in $BUF
+	BNE	5$
+	INC	R4
+5$:	MOVB	R4, 6$ + 2
+6$:	.RND	0
+	MOV	#DLOC-1, R2
+	ADD	R3, R2			; R2: address of DLOC-1(R3)
+	MOVB	(R2), R0		; R0: old Dwarf location
+	MOVB	R0, ODLOC-1(R3)
+	MOVB	$BUF+1(R1), R1		; R1: new Dwarf location
+	MOVB	R1, (R2)
+					; R4 != 0
+	MOV	LOC, R5			; R5: LOC
+	CMPB	R1, R5
+	BEQ	8$			; DLOC == LOC
+	CMPB	R0, R5
+	BEQ	8$      		; ODLOC == LOC
+	CMP	R5, #15
+	BHIS	9$
+	CLR	R4
+8$:	MOVB	R4, DSEEN-1(R3)
+9$:	TSTB	DSEEN-1(R3)
+	BEQ	L6030A
+	MOVB	R5, (R2)		; Stay on LOC
+        CLR	R0		; K
+	CMP	R3, #6
+	BNE	NONPIR
+
+
+;; The Pirate's spotted him. He leaves him alone once we've found chest.
+;; k counts if a treasure is here. If not, and TALLY=TALLY2 plus one for
+;; an unseen chest, let the pirate be spotted.
+	L.EQ	CHLOC, L6030A
+	P.MI	CHEST, L60161
+L6030C:	BR	L6030A
+
+;; This threatening little Dwarf is in the room with Him!
+NONPIR:	INC	DTOTAL		;6027
+	CMP	ODLOC-1(R3), (R2)
+	BNE	L6030A
+	INC	(PC)+
+ATTACK:	.WORD	0
+	TST	(PC)+
+KNFLOC:	.WORD	0		; 0 if no KNIFE here; LOC if KNIFE here, -1 after caveat
+	BLT	1$
+	MOV	R5, KNFLOC	; KNFLOC = LOC
+1$:	MOVB	DFLAG, R0
+	MOV	#-95 * 2, R4
+2$:	ADD	#95, R4
+	SOB	R0, 2$
+	.RND	1000		; R4: (DFLAG-2)*95
+	CMP	R1, R4
+	ADC	(PC)+
+STICK:	.WORD	0
+L6030A:	BR	L6030
+
+
+L6031:	.RSPEAK	88			; There are %d threatening little dwarves in the room with you
+	BR	L77$
+
+L89:	.RSPEAK	89			; %d of them throw knives at you!
+	MOV	#6, R1
+	BR	L82
+
+;; Things are in full swing. Move each dwarf at random, except if he's seen us he sticks with us.
+;; Dwarves never go to locs <15.
+;; If wandering at random, they don't back up unless there's no alternative.
+;; If they don't have to move, they attack. And, of course, dead dwarves don't do much of anything.
+L6010:	MOV	#6, R3			; R3: #Dwarf
+L6011:	CLR	R1
+	BISB	DLOC-1(R3), R1
+	BNE	DWRMOT
+L6030:	SOB	R3, L6011
+;; Now we know what's happening. Let's tell the poor sucker about it
+	MOVB	DTOTAL, R0
+	MOVB	R0, $FDTOT + 3
+	BEQ	L84
+	SOB	R0, L6031
+;74$:	MOV	R1, LOC
+L75$:	.RSPEAK	4			; There is a threatening little dwarf in the room with you
+L77$:	MOVB	ATTACK, R0
+ 	MOVB	R0, $FKNIV + 2
+	BEQ	L84
+	CMPB	DFLAG, #2
+	BNE	L81
+	INCB	DFLAG
+L81:	SOB	R0, L89
+	.RSPEAK	2			; One sharp nasty knife is thrown at you!
+	MOV	#52, R1
+L82:	MOVB	STICK, R2
+	MOVB	R2, $FSTIK + 2
+	R2.HI	1, L83
+	ADD	R2, R1
+	.RSPEAK
+	TSTB	R4
+L84:	BNE	DEAD.1
+	BR	DESCR
+
+
+
+
+;; If any of the survivors is at LOC, replace him with the alternate.
+L6000:  CLR	(PC)+
+DTOTAL:	.WORD	0
+	CLR	ATTACK
+	CLR	STICK
+	SOB	R4, L6010		; R4: DFLAG-1
+	L.LO	15, JDESC2		; DFLAG == 1 case
+	.PCT	95, JDESC2
+	INCB	(R5)			; DFLAG = 2
+	MOV	#5, R3
+15$:	CMPB	DLOC-1(R3), R2		; R2: LOC
+	BNE	6002$
+	MOVB	#DALTLC, DLOC-1(R3)
+6002$:	MOV	DLOC-1(R3), ODLOC-1(R3)
+	SOB	R3, 15$
+	.RSPEAK	10			; A little dwarf just walked around a corner, saw you, threw a little AXE
+	.DROP	AXE
+JDESC2:	BR	DESCR		;!!!O
+
+
+
+
+;; Can't leave Cave once it's closing (except by Main Office)
+;; R1: NEWLOC
+REPL2:	R1.HI	8, 71$
+	TST	R1
+	BEQ	71$
+	IF.NE	O.CLIN, 71$
+	MOV	LOC, R1
+	CALL	SPANIC
+;; See if a Dwarf has seen him and has come from where he wants to go.
+;; If so, the Dwarf's blocking his way. If coming from place forbidden to Pirate
+;; (Dwarves rooted in place) let him get out (and attacked).
+71$:	CALL	IFFORB
+	BCS	L74
+	CMP	R1, R2		; R1: NEWLOC, R2: LOC
+	BEQ	L74
+	MOV	#5, R3
+72$:	TSTB	DSEEN-1(R3)
+	BEQ	73$
+	CMPB	ODLOC-1(R3), R1
+	BNE	73$
+	.RSPEAK	19		; A little dwarf with a big knife blocks your way
+	BR	L78		; Don't change LOC
+73$:	SOB	R3, 72$
+L74:	MOV	R1, (PC)+
+LOC:	.WORD	1
+        BEQ	DESCR
+L78:	CALL	IFFORB
+	BCS	DESCR
+	MOV	#DFLAG, R5
+	MOVB	(R5), R4	; R4: DFLAG
+	BNE	L6000
+;; Dwarf stuff. See earlier comments for description of variables.
+;; Remember sixth DWARF is PIRATE and is thus very different except for motion rules.
+;;
+;; First off, don't let the DWARVES follow him into a pit or a wall.
+;; Activate the whole mess the first time he gets as far as the Hall of Mists (Loc 15).
+;; If NEWLOC is forbidden to PIRATE (in particular, if it's beyond the TROLL
+;; bridge), bypass DWARF stuff. That way PIRATE can't steal return toll, and
+;; Dwarves can't meet the bear. Also means dwarves won't follow him into dead
+;; end in maze, but c'est la vie. They'll wait for him outside the dead end.
+	R1.LO	15, DESCR	; Hall of Mists
+	MOV	#25*256+1, (R5)	; DFLAG = 1, BSCORE=25
+				; DFLAG will tell us if he ever got suitably deep into the cave
+;; Describe the current location and (maybe) get next command.
+;; Print text for current LOC.
+DESCR:	MOV	LOC, R1		;!!!?O
+	.FORCLOC
+	BCS	DESCR5
+	.DARK
+	BPL	DESCR5
+	IF.EQ	O.WZDA, 1$
+	.PCT	35, FALLPT
+1$:	N.TOT	BEAR, 2$
+	.RSPEAK	141			; You are being followed by a very large, tame bear
+2$:	.RSPEAK	16			; It is now pitch dark.  If you proceed you will likely fall into a pit
+	BR	DESCR6
+
+.IF NE C$BK10
+BKINIT:	MOV	#ABKSTR, SP
+	MOV	#I.SPK1, ^o10
+	MOV	#I.TRAP, ^o34
+	MOVB	#C.SP, $SPBUF
+	CLR	$TMLIM			; CF = 0
+	MOV	#^o24, $TMCSR		; Enable Timer on max frequency with Monitoring
+	CALL	BKINIC
+	BR	DESCR
+.ENDC	 ; C$BK10
+
+L83:	.RSPEAK	90			; %d of them get you!
+DEAD.1:	BR	DEAD
+
+
+REPL.1:	JMP	REPL
+
+DESCR5:	N.TOT	BEAR, 1$
+	.RSPEAK	141			; You are being followed by a very large, tame bear
+1$:	R1.HI	130, DESCR8		; Only long text is available
+	TST	(PC)+
+ABBNUM:	.WORD	5			; How often we should print non-abbreviated descriptions
+	BEQ	DESCR8
+	TSTB	ABB-1(R1)
+	BEQ	DESCR8
+	PUSH	R1
+	MOV	#STEXT, R5
+	CALL	FINDEN
+	POP	R1			; R1: LOC
+	TSTB	R2
+	BEQ	DESCR8
+	MOV	#STEXT, R2
+	BR	DESCR9
+DESCR8:	MOV	#LTEXT, R2
+DESCR9:	.SPEAK
+	.FORCLOC
+	BCS	MOTIO1
+DESCR6:	R1.NE	LY2, 54$
+	.PCT	75, 54$
+	.CLOSNG	54$
+	.RSPEAK	20			; A hollow voice says "PLUGH"
+54$:	.DARK
+ 	BMI	REPL.1
+	ADD	#ABB-1, R1
+	INCB	(R1)
+	CMPB	(R1), ABBNUM
+	BNE	9$
+	CLRB	(R1)
+9$:	.ATLOC
+DESC.2:	BEQ	REPL.1			; No object
+	MOV	R2, R5
+	R2.LO	B.OBJ+OBJMAX+1, 1$
+	SUB	#OBJMAX, R2
+1$:	MOVB	R2, OBJ
+
+DESCR3:
+
+;; Print out descriptions of objects at this location.
+;; If not closing and property value is negative, tally off another treasure.
+;; RUG is special case; once seen, its prop is 1 (DRAGON on it) till DRAGON is killed.
+;; Similarly for CHAIN; Prop is initially 1 (locked to BEAR).
+;; These hacks are because Prop=0 is needed to get full score.
+	O.NE	STEPS, 19$
+	.TOT	NUGGET, L2008
+19$:	P.PL	, L2007
+	.CLOD	L2008
+	.SPROP	, 0
+	O.EQ	RUG, 10$
+	O.NE	CHAIN, 2005$
+10$:	.SPROP	, 1
+2005$:	DECB	TALLY
+	BEQ	L2007
+	CMPB	TALLY, TALLY2
+	BNE	L2007
+	CMP	LIMIT, #35
+	BLE	L2007
+	MOV	#35, LIMIT		; If remaining treasures too elusive, zap his LAMP
+L2007:	.PSPEAK	0, -1
+L2008:	MOV	R5, R2
+	.NEXT
+	BR	DESC.2
+
+
+
+FALLPT:	.RSPEAK	23			; You fell into a pit and broke every bone in your body!
+DEAD:	MOV	#LOC, R5		; R5: #LOC
+	MOV	(R5), (PC)+	;84	OLDLC2=LOC
+OLDLC2:	.WORD	0			; The last place he was safe
+;; Okay, he's dead. Let's get on with it
+DEAD1:	ADD	#2, NUMDIE	;99
+	SUB	#10, SCORE
+	.CLOSNG	EXITS1
+
+;; "You're dead, Jim."
+;;
+;; If the current loc is zero, it means the clown got himself killed.
+;; We'll allow this MAXDIE times.
+;; MAXDIE is automatically set based on the number of snide messages available.
+;; Each death results in a message (81, 83, etc.)
+;; which offers reincarnation; if accepted, this results in message 82, 84,
+;; etc.  the last time, if he wants another chance, he gets a snide remark as
+;; we exit.  when reincarnated, all objects being carried get dropped at OLDLC2
+;; (presumably the last place prior to being killed) without change of PROPS.
+;; the loop runs backwards to assure that the bird is dropped before the cage.
+;; (This kluge could be changed once we're sure all references to bird and cage are done by keywords.)
+;; The lamp is a special case (it wouldn't do to leave it in the cave).
+;; It is turned off and left outside the building (only if he was carrying it, of course).
+;; He himself is left inside the building (and heaven help him if he tries to XYZZY back into the cave without the lamp!).
+;; OLDLOC is zapped so he can't just "retreat".
+;; The easiest way to get killed is to fall into a pit in pitch darkness.
+;94$:
+	.YESNO	79, EXITSC
+NUMDIE	= . - 2				; Number of times killed so far (*2 + 79)
+	MOV	R2, R1
+	INC	R1
+	.RSPEAK
+	CMPB	NUMDIE, #MAXDIE * 2 + 79
+	BEQ	EXITSC
+	CLR	PLACE-1-B.OBJ + WATER	; CLR both bytes: for WATER & OIL
+	MOV	(R5), OLDLOC		; OLDLOC=LOC
+	N.TOT	LAMP, 96$
+	.SPROP	LAMP, 0
+	.DROP	LAMP, 1
+96$:	MOV	#OBJMAX, R3
+	MOV	OLDLC2, 5$ + 3
+97$:	N.TOT	-3, 98$
+5$:	.DROP	-3, 0
+98$:	SOB	R3, 97$
+	MOV	#LBUILD, (R5)		; LOC=3
+DESCR2:	JMP	DESCR		;!!!o
+
+L5105:	ADD	#ENTRNC-DEPRES, (R2)	; OBJ=ENTRNC
+L5104:	ADD	#DEPRES-GRATE, (R2)	; OBJ=DEPRES
+MOTIO1:	JMP	MOTION		;!!!o
+
+
+
+;; LAMP ON
+.ON.:	N.HERP	LAMP, 38	; You have no source of light
+	TST	(PC)+
+LIMIT:	.WORD	330		; Limit	lifetime of lamp
+	BLT	P184
+	.SPROP	LAMP, 1
+	.RSPEAK	39		; Your lamp is now on
+	.WZDARK	DESCR2
+	RETURN
+P184:	.RSPKR	200		; Your lamp has run out of power
+
+
+
+
+
+EXITS1:
+	.RSPEAK	131		; It looks as though you're dead. Well, seeing as how it's so close to closing time anyway
+;; Exit code. Will eventually include scoring. For now, however, ...
+; 20000$:
+EXITSC:	.RSPEAK	54			; Ok
+REPOR3:	JMP	REPORT
+
+;; Analyse an object word. See if the thing is here, whether we've got a verb yet, and so on.
+;; Object must be here unless verb is "FIND" or "INVENT(ORY)" (and no new verb yet to be analysed).
+;; WATER and OIL are also funny, since they are never actually dropped at any location, but might be here inside
+;; the BOTTLE or as a feature of the location.
+L5000:	MOV	#OBJ, R2
+	MOV	R1, (R2)
+	.HERE	, ANAOBJ
+	CMPB	FIXED-1-B.OBJ(R1), LOC
+	BEQ	ANAOBJ
+	MOV	LOC, R1
+	O.NE	GRATE, 5110$	;5100
+	L.EQ	1, L5104
+	L.EQ	4, L5104
+	L.EQ	7, L5104
+	R1.LO	10, 5110$
+	R1.LO	15, L5105
+5110$:	O.NE	DWARF, 5120$
+	N.MET	5120$
+	MOV	#5, R3
+1$:	CMPB	DLOC-1(R3), R1
+	BEQ	ANAOBJ
+	SOB	R3, 1$
+5120$:	.LIQLOC
+	CMP	R1, (R2)	; (R2): OBJ
+	BEQ	ANAOBJ
+	N.HERE	BOTTLE, 5121$
+	.LIQ
+	CMP	R1, (R2)	; (R2): OBJ
+	BEQ	ANAOBJ
+5121$:	O.NE	PLANT, 5130$
+	N.AT	PLANT2, 5130$
+	N.PRP0	PLANT2, 5141$
+5130$:	O.NE	KNIFE, 5140$
+5137$:	CMP	KNFLOC, LOC
+	BNE	5140$
+	MOV	#-1, KNFLOC
+	.RSPKR	116		; The dwarves' knives vanish as they strike the walls of the cave
+5140$:	O.NE	ROD, DARKNESS
+	N.HERE	ROD2, DARKNESS
+	MOV	#ROD2, (R2)
+	BR	ANAOBJ
+5141$:	MOV	#PLANT2, (R2)
+ANAOBJ:	WD2.EQ	0, ANAOB4	;5010
+;; Get second word for analysis.
+L2800:	MOV	(PC)+, R1
+WD2:	.WORD	0
+	CLR	WD2			;!!!?
+L2610:	R1.NE	WEST, ANVERB
+	MOV	$BUF, R0
+	BIC	#40100, R0		; To uppercase
+	CMP	R0, #"WE
+	BNE	ANVERB
+	.PCT	90, ANVERB
+	.RSPEAK	17		; If you prefer, simply type "W" rather than "WEST".
+;2630:
+ANVERB:	TST	R1
+	BMI	L3000
+	R1.LO	B.OBJ+1, L4000		; Action
+	R1.LO	B.OBJ+OBJMAX+1, L5000
+	MOV	R1, (PC)+
+VERB:	.WORD	0
+	R1.HI	B.MOVE, MOTIO1
+	.RSPKR	0			; Word code is Message#
+
+
+
+ANAOB4:	JMP	ANAOB2		;!!!o
+
+;; Analyse a verb. Remember what it was, go back for object if second word
+;; unless verb is "SAY", which snarfs arbitrary second word.
+L4000:	MOV	R1, VERB
+	WD2.EQ	0, ANAOB4
+	V.NE	SAY, L2800
+;; Echo WD (or WD1 if no WD2 (say what?, etc.).)  magic words override.
+.SAY.:	MOV	WD2, R1
+	BEQ	1$
+	MOV	R1, WD1
+1$:	MOV	WD1, VERB
+	V.EQ	XYZZY, .SAY.1
+	V.EQ	PLUGH, .SAY.1
+	V.EQ	PLOVE, .SAY.1
+	R1.LO	FEE, 2$
+	R1.LO	FUM+1, .SAY.1
+2$:	.RSPEAK	64			; Okay, <word>
+P.INP2:	.PUTS	0
+INP2	= . - 2				; Self-modifying code
+	RETURN
+.SAY.1:	CLR	WD2
+	CLR	OBJ
+	MOV	R2, R4
+	MOV	VERB, R1
+	BR	ANVERB
+
+
+
+;; Gee, I don't understand.
+L3000:	.PCTP	20, 13		; I don't understand that!
+	.PCTP	20, 61		; What?
+	.RSPKR	60		; I don't know that word.
+
+
+
+DARKNESS:
+;5190$:
+	WD2.NE	0, 5199$
+	V.EQ	FIND, ANAOBJ
+	V.EQ	INVENT, ANAOBJ
+
+5199$:	.RSPEAK	51		; I don''t see any
+	BR	P.INP2
+
+DNTUND:	.RSPEAK	13		; I don't understand
+	.PUTS	$SPBUF		; to print space
+	BR	REPL1
+
+
+;; Magazines in dwarvish, message we've seen, and . . . OYSTER?
+.READ.:	BNE	9270$
+	.DARK
+	BMI	DNTUND
+	N.HERE	MAGZIN, 1$
+	MOV	#MAGZIN, OBJ
+1$:	N.HERE	TABLET, 2$
+	MOV	#TABLET, OBJ
+2$:	N.HERE	MESSAG, 3$
+	MOV	#MESSAG, OBJ
+3$:	O.EQ	0, DNTUND
+9270$:	.DARK
+	BMI	DARKNESS
+	IF.NE	O.CLOD, 4$
+	N.TOT	OYSTER, 4$
+	O.NE	OYSTER, 4$
+	IF.EQ	O.HIN2, 5$
+	.YESNP	192, 54			; Should I go ahead and read it anyway?
+	CLRB	HINTED+1
+	.RSPKR	193			; It says, "There is something strange about this place
+4$:	IF.NE	O.HIN2, 6$
+5$:	O.NE	OYSTER, 6$
+	.TOTP	OYSTER, 194		; It says the same thing it did before
+6$:	O.EQ.P	MAGZIN, 190		; I'm afraid the magazine is written in dwarvish
+	O.EQ.P	TABLET, 196		; "Congratulations on bringing light into the Dark Room!"
+	O.EQ.P	MESSAGE, 191		; "This is not the maze where the pirate leaves his treasure chest."
+	.RSPKR	195			; I'm afraid I don't understand
+
+;40900:
+ASKHINT:MOV	R5, R1		;40010
+	ASL	R1
+	ADD	#207-2+1, R1
+	MOVB	R1, 4$			; Hint message is next after question
+	DEC	R1
+	MOVB	HTURNS-1(R5), HINTLC-1(R5)
+	.YESNO	, L40031
+	MOVB	HINTED+2-1(R5), R0
+	MOVB	R0, HPRICE
+	.RSPEAK	202			; I am prepared to give you a hint, but it will cost you
+	.YESNO	68, L40031		; Do you want the hint?
+4$:	.RSPEAK	0
+	CLRB	HINTED+2-1(R5)		; Hint used
+	MOV	#30, R4
+	CMP	LIMIT, R4
+	BHIS	L40020
+22$:	ADD	R0, LIMIT
+	SOB	R4, 22$
+L40020: BR	L40030
+
+HDARK:	SOB	R4, ASKHINT
+	P.MI	EMRALD, L40020		;40800
+	.PROP	PYRAM
+HDARK1:	BPL	L40020
+	BR	ASKHINT
+
+HMAZE:	SOB	R4, HDARK
+ 	.ATLOC				;40700
+	BNE	L40020
+	MOVB	(PC)+, R1
+OLDLOC:	.WORD	0
+	.ATLC
+	BNE	L40020
+	MOVB	OLDLC2, R1
+	.ATLC
+	BNE	L40020
+	CMPB	#1, HOLDNG
+	BR	HDARK1
+
+HSNAKE:	SOB	R4, HMAZE
+	N.HERE	SNAKE, L40020		;40600
+	N.HERE	BIRD, ASKHINT
+	BR	L40020
+
+HBIRD:	SOB	R4, HSNAKE
+	N.HERE	BIRD, L40030		;40500
+	N.TOT	ROD, L40030
+	O.EQ	BIRD, ASKHINT
+	BR	L40030
+
+
+
+REPL:	CLR	VERB
+REPL1:	CLR	(PC)+
+OBJ:	.WORD	0
+	MOV	#ASTKUP, SP
+	PUSH	#REPL
+CKHIN0:
+;	BR	CKHINT
+;; Check if this LOC is eligible for any hints.
+;; If been here long enough, branch to help section (on later page).
+;; Hints all come back here eventually to finish the loop.
+;; Ignore "HINTS" < 4 (special stuff, see database notes).
+CKHINT:
+;2600:
+	MOV	#6, R5
+CKHIN1:	TSTB	HINTED+2-1(R5)
+	BEQ	L40030			; Hint used
+	MOVB	HTOFF-1(R5), R3
+	ADD	#HTCAVE, R3
+	.FILOC
+	BNE	L40020
+	DECB	HINTLC-1(R5)
+	BGT	L40030			; No hint
+;; Hints
+;;
+;; Come here if he's been long enough at required LOC(s) for some unused hint.
+;; Hint number is in variable "HINT".
+;; Branch to quick test for additional conditions, then come back to do neat stuff.
+	MOV	R5, R4
+	SOB	R4, HBIRD
+;40400:
+HCAVE: 	N.PRP0	GRATE, L40020
+	N.HERE	KEY, ASKHINT
+	BR	L40020
+
+L40031:	.RSPEAK	54		; Ok
+L40030:	SOB	R5, CKHIN1	;2602
+	IF.NE	O.CLOD, L2605
+	                     	; CLOSED is True
+;; Kick the random number generator just to add variety to the chase.
+;; Also, if closing time, check for any objects being toted with prop < 0 and set
+;; the prop to -1-prop. This way objects won't be described until they've
+;; been picked up and put down separate from their respective piles.
+;; Don't tick CLOCK1 unless well into cave (and not at Y2).
+L2600:  MOV	#OBJMAX, R3
+2603$:	N.TOT	-3, 2604$
+	P.PL	-3, 2604$
+	COM	R1
+	MOV	R1, R2
+	.SPROP	-3
+2604$:	SOB	R3, 2603$
+L2605:	.DARK
+	SXT	WZDARK
+	MOV	#KNFLOC, R0
+	TST	(R0)
+	BLE	2606$
+	CMP	(R0), LOC
+	BEQ	2606$
+	CLR	(R0)		; KNFLOC = 0
+2606$:	CALL	READ$
+	BR	CKFOO
+
+
+;; FEE FIE FOE FOO (AND FUM). Advance to next state if given in proper order.
+;; Look up WD1 in section 3 of vocab to determine which word we've got.
+;; Last word zips the EGGS back to the Giant Room (unless already there).
+.FEE.:  O.NE.P	0, 9			; I don't know how
+	SUB	#FEE, R1
+	MOV	#FOOBAR, R5
+	CMP	(R5), R1
+	BEQ	1$
+	TST	(R5)
+	BEQ	.NOTH.
+	.RSPKR	118			; What's the matter, can't you read?  Now you'd best start over
+1$:	COM	(R5)			; FOOBAR = -(R1+1)
+	R1.NEP	3, 54			; Ok
+	CLR	(R5)			; FOOBAR = 0
+	CMPB	#92, PLACE-1-B.OBJ + EGGS		; #92
+	BEQ	.NOTH.
+	N.TOT	EGGS, 8256$
+	L.EQ	92, NOTHING	; EGGS
+8256$:	IF.NE	O.EGGS, 8253$
+	IF.NE	O.TROL, 8253$
+	N.PRP0	TROLL, 8253$
+	.SPROP	TROLL, 1	; Bring back TROLL if we steal the EGGS back from him before crossing
+8253$:	.MOVE	EGGS, 92
+	L.EQ	92, 8255$
+	;!!!O
+	N.HERE	EGGS, 8257$
+	.PSPEAK	EGGS, 1
+	RETURN
+8257$:	.PSPEAK	EGGS, 2
+	RETURN
+8255$:	.PSPEAK	EGGS, 0
+NOTHING:
+REPL.F:	RETURN
+
+
+
+
+ANAOB2:	MOV	VERB, R1
+	BNE	2$
+	.RSPEAK	87		; What do you want to do with the OBJ?
+	MOV	INP2, R5
+	MOVB	#'?, (R5)+
+	CLRB	(R5)+
+	.PUTS	$SPBUF    	; to print space
+	BR	CKHIN0
+2$:	R1.HI	FEE-1, .FEE.
+	ASL	R1
+	CLR	R0
+	MOV	OBJ, R5			; ZF processed by actions
+	JMP	@ACTION-2(R1)
+
+
+.NOTH.:.RSPKR	42			; Nothing happens
+
+L2609:
+;;  Another way we can force an end to things is by having the lamp give out.
+;;  When it gets close, we come here to warn him.  we go to 12000 if the lamp
+;;  and fresh batteries are here, in which case we replace the batteries and
+;;  continue.  12200 is for other cases of lamp dying.  12400 is when it goes
+;;  out
+;12000
+	.RSPEAK	188			; Your lamp is getting dim. I'm taking the liberty of replacing the batteries
+	.SPROP	BATTER, 1
+	TOT.DRO	BATTER
+	ADD	#2500, (R5)		; LIMIT += 2500
+	MOV	#-1, LMWARN
+
+;; Do preliminary analysis of sentence to find certain special cases, viz,
+;; ENTER <WATER,STREAM>
+;; ENTER <LOCATION>
+;; <WATER,OIL> <PLANT,DOOR>
+L19999:	WD1.NE	ENTER, 2609$
+	WD1.EQ	WATER, L2607
+	WD1.EQ	STREAM, L2607
+2609$:  V.EQ	WATER, 4$
+	WD1.NE	OIL, 7$
+4$:	WD2.EQ	PLANT, 6$
+	WD2.NE	DOOR, 7$
+6$:	MOV	#POUR, WD2
+7$:	MOV	(PC)+, R1
+WD1:	.WORD	0
+	JMP	L2610
+
+
+
+
+;; Every input, check "FOOBAR" flag.
+;; If Zero, nothing's going on.
+;; If Neg, make Pos.
+;; If Pos, he skipped a word, so make it Zero.
+CKFOO:	MOV	R2, WD2
+	NEG	(PC)+
+FOOBAR:	.WORD	0		; Current progress in saying "FEE FIE FOE FOO"
+	BGE	2607$
+	CLR	FOOBAR
+2607$:	INC	TURNS
+	.TALLY	1$
+	L.LO	15, 1$		; Not in Cave
+	L.EQ	LY2, 1$
+	DEC	CLOCK1		; --CLOCK1
+	BEQ	L10000
+1$:	TST	(PC)+
+CLOCK1:	.WORD	30		; Number of turns from finding last treasure till closing
+	BGT	L2608
+	DEC	(PC)+
+CLOCK2:	.WORD	50		; Number of turns from first warning till blinding flash
+	BEQ	L11000
+L2608:	.PROP	LAMP
+	MOV	#LIMIT, R5
+	SUB	R1, (R5)	; LIMIT -= R1
+	BNE     7$
+	DEC	(R5)	;12400    --LIMIT
+	.SPROP	LAMP, 0
+	N.HERE	LAMP, L19999
+	.RSPEAK	200			; Your lamp has run out of power
+	BR	L19999
+7$:	BGT	9$
+	L.LO	9, L12600
+9$:	CMP	(R5), #30
+	BGT	L19999
+	N.HERE	LAMP, L19999
+	N.HERE	BATTER, L12200
+	.PRP0	BATTER, L2609
+L12200:	INC	(PC)+
+LMWARN:	.WORD	-1			; Says (when >=0) whether he's been warned about lamp going dim
+BNE999:	BNE	L19999
+	PUSH	#L19999
+	N.PR0P	BATTER, 189		; Your lamp is getting dim, and you're out of spare batteries
+	IF.EQP	O.BATT, 206		; Your lamp is getting dim. You'd best start wrapping this up
+	.RSPKR	187                     ; Your lamp is getting dim. You'd best go back for those batteries
+
+
+
+L2607:	.LIQLOC
+	R1.EQP	WATER, 70		; Your feet are now wet
+P43:	.RSPKR	43			; Where?
+
+;; He's wandered outside and the LAMP is used up, in which case we force him to give up
+L12600:	.RSPEAK	185			; There's not much point in wandering around out here, and you can't explore the cave without a lamp
+	JMP	REPORG		; CLR GAVEUP; JMP REPORT
+
+
+
+;; Cave closing and scoring
+;;
+;; These sections handle the closing of the cave. The cave closes "CLOCK1"
+;; turns after the last treasure has been located (including the PIRATE's
+;; CHEST, which may of course never show up). Note that the treasures need not
+;; have been taken yet, just located.  hence CLOCK1 must be large enough to get
+;; out of the cave (it only ticks while inside the cave).  when it hits zero,
+;; we branch to 10000 to start closing the cave, and then sit back and wait for
+;; him to try to get out.  if he doesn't within CLOCK2 turns, we close the
+;; cave; if he does try, we assume he panics, and give him a few additional
+;; turns to get frantic before we close.
+;; When CLOCK2 hits zero, we branch to 11000 to transport him into the final puzzle.
+;; Note that the puzzle depends upon all sorts of random things.
+;; For instance, there must be no WATER or
+;; OIL, since there are Beanstalks which we don't want to be able to WATER,
+;; since the code can't handle it.
+;; Also, we can have no KEYS, since there is a
+;; GRATE (having moved the fixed object!) there separating him from all the treasures.
+;; Most of these problems arise from the use of negative prop numbers to suppress
+;; the object descriptions until he's actually moved the objects.
+;;
+;; When the first warning comes, we lock the GRATE, destroy the BRIDGE, kill
+;; all the DWARVES (and the PIRATE), remove the troll and bear (unless dead),
+;; and set "CLOSNG" to true (25 score points)
+;; Leave the DRAGON; too much trouble to move it.
+;; from now until CLOCK2 runs out, he cannot unlock the GRATE, move to any
+;; location outside the cave (LOC<9), or create the BRIDGE.
+;; Nor can he be resurrected if he dies.
+;; Note that the SNAKE is already gone, since he got
+;; to the treasure accessible only via the hall of the Mt. King.
+;; Also, he's been in Giant Room (to get EGGS), so we can refer to it.
+;; Also also, he's gotten the PEARL, so we know the bivalve is an OYSTER.
+;; *AND*, the DWARVES must have been activated, since we've found CHEST.
+L10000:	.SPROP	GRATE, 0
+	.SPROP	FISSUR, 0
+	MOV	#6, R3
+1$:	CLRB	DLOC-1(R3)	; Clear DLOC, DSEEN
+	CLRB	DSEEN-1(R3)
+	SOB	R3, 1$
+
+	CLRB	FIXED + CHAIN-B.OBJ-1
+	CLRB	FIXED + AXE-B.OBJ-1
+
+	.RSPEAK	129		; A sepulchral voice reverberating through the cave, says, "Cave closing soon"
+	CLRB	CLOSNG
+	CALL	RMTROL		; Must return with ZF=0
+	BR	BNE999		; BNE L19999
+
+;; Once he's panicked, and CLOCK2 has run out, we come here to set up the storage room.
+;; The room has two locs, hardwired as 115 (NE) and 116 (SW).
+;; At the ne end, we place empty BOTTLEs, a nursery of plants, a bed of
+;; OYSTERs, a pile of LAMPs, RODs with stars, sleeping DWARVes, and him.
+;; And the SW end we place GRATE over treasures, SNAKE pit, covey of caged BIRDs, more RODs, and PILLOWs.
+;; A MIRROR stretches across one wall.
+;; Many of the objects come from known locations and/or states (e.g. the SNAKE is known to
+;; have been destroyed and needn't be carried away from its old "place"),
+;; Making the various objects be handled differently.
+;; We also drop all other objects he might be carrying (lest he have some which could cause trouble,
+;; such as the KEYS). We describe the flash of light and trundle back.
+L11000:	MOV	#RTABLE, R4
+4$:	MOVB	(R4)+, R2
+	BEQ	5$
+	MOVB	(R4), R1
+	BIC	#^o177600, R1
+	.MOVE
+	MOVB	(R4)+, R2
+	SXT	R2
+	DEC	R2
+	.SPROP	-1
+	BR	4$
+5$:	.MOVE	GRATE, 116		; Leave the GRATE with normal (non-negative property).
+	MOVB	#116, FIXED-1+MIRROR-B.OBJ
+	MOV	#OBJMAX, R3
+7$:	N.TOT	-3, 8$
+	.DSTROY	-3
+8$:	SOB	R3, 7$
+	CLRB	CLOSED			; CLOSED = true
+	.RSPEAK	132			; The sepulchral voice entones, "The cave is now closed."
+	MOV	#115, R1		; R1: NEWLOC
+	MOV	R1, OLDLOC
+	JMP	REPL2
+
+
+
+;; LAMP OFF
+.OFF.::	N.HERP	LAMP, 38	; You have no source of light
+	.SPROP	LAMP, 0
+	.RSPEAK	40		; Your lamp is now off
+	.DARK
+	BPL	REPL.5
+	.RSPKR	16		; It is now pitch dark.  If you proceed you will likely fall into a pit
+
+.OPEN2:	JMP	DNTUN2		;!!!o
+
+
+
+;; Find. Might be carrying it, or it might be here. Else give caveat.
+.FIND.:	BEQ	.OPEN2		; jmp DNTUND
+	.TOTP	, 24		; You are already carrying it!
+	IF.EQP	O.CLOD, 138	; I daresay whatever you want is around here somewhere
+	N.AT	BOTTLE, 7$
+	.LIQ
+	CMP	R1, R5
+	BEQ	8$
+7$:	N.AT	, 4$
+8$:	.RSPKR	3		; I believe what you want is right here with you
+4$:	N.MET	P59
+	O.NE	DWARF, P59
+	MOV	#5, R3
+3$:	CMPB	DLOC-1(R3), LOC
+	BEQ	8$
+	SOB	R3, 3$
+P59:	.RSPKR	59		; I can only tell you what you see
+
+REPL.5:	RETURN	;!!!O
+
+
+
+
+;; INVENTORY. If object, treat same as FIND. Else report on current burden
+.INVE.:	BNE	.FIND.
+	MOV	#-1, R0		; Flag - is title was printed
+	MOV	#B.OBJ+1, OBJ
+1$:	N.TOT	, 5$
+	INC	R0
+	BNE	2$
+	.RSPEAK	8		; You are currently holding the following:
+2$:	.PSPEAK	0, -2
+5$:	INC	OBJ
+	O.NE	B.OBJ+OBJMAX+1, 1$
+	.TOTP	BEAR, 141	; You are being followed by a very large, tame bear
+	TST	R0
+	BPL	REPL.5
+	.RSPKR	 7		; You're not carrying anything
+
+
+P28:    .RSPKR	28		; There is nothing here with a lock!
+
+;; Lock, Unlock, no object given. Assume various things if present.
+;8040
+.LOCK.:	BNE	.OPEN.
+	N.HERE	CLAM, 1$
+	MOV	#CLAM, R5
+1$:	N.HERE	OYSTER, 2$
+	MOV	#OYSTER, R5
+2$:	N.AT	DOOR, 3$
+	MOV	#DOOR, R5
+3$:	N.AT	GRATE, 4$
+	MOV	#GRATE, R5
+4$:	N.HERE	CHAIN, 5$
+	TST	R5
+	BNE	.OPEN2		; JMP	DNTUN2
+	MOV	#CHAIN, R5
+5$:	MOVB	R5, OBJ
+	BEQ	P28
+				; Fallback
+;; LOCK, UNLOCK object. Special stuff for opening clam/oyster and for chain.
+.OPEN.:	BNE	L9040
+	.TRYGE	CLAM
+	.TRYGE	OYSTER
+	N.AT	DOOR, 1$
+	MOV	#DOOR, OBJ
+1$:	N.AT	GRATE, 2$
+	MOV	#GRATE, OBJ
+2$:     O.EQ	0, 3$
+	.HERE	CHAIN, DNTUN4
+3$:	.TRYGE	CHAIN
+	O.EQ	0, P28
+L9040:	O.EQ	CLAM, L9046
+	O.EQ	OYSTER, L9046
+	.HERE	KEY, 4$
+	O.EQ.P	GRATE, 31		; You have no keys!
+	O.EQ.P	CHAIN, 31		; You have no keys!
+	O.EQ.P	KEY, 55			; You can't unlock the keys
+	O.EQ.P	CAGE, 32		; It has no lock
+	O.NE.P	DOOR, 33		; I don't know how to lock or unlock such a thing
+	.PRP0P	DOOR, 155		; The door is extremely rusty and refuses to open
+	.RSPKR	54			; Ok
+4$:	O.EQ	GRATE, L9043
+	O.EQ	CHAIN, L9048
+	.CLOSNG	SPANIC
+L9043:	.PROP	GRATE
+	CLR	R2
+	V.EQ	LOCK, 1$
+	INC	R2
+1$:	.SPROP	GRATE
+	ASL	R2
+	ADD	R2, R1
+	ADD	#34+2-122+CLAM, R1
+PB120:	SUB	#2, R1			; I advise you to put down the
+PB122:  ADD	#122-CLAM, R1		; You don't have anything strong enough to open the
+SPKRET:	.RSPKR	0
+
+
+;; Panic mode
+SPANIC:	INC	(PC)+
+PANIC:	.WORD	-1			; Says (when >=0) whether he's found out he's trapped in the cave
+	BNE	1$
+	MOV	#15, CLOCK2
+1$:	.RSPKR	130			; A voice  announces: "This exit is closed. Please leave via Main Office."
+
+
+
+;; CLAM/OYSTER
+L9046:	V.EQ.P	LOCK, 61		; What?
+	MOV	R5, R1
+	N.TOT	TRIDNT, PB122
+	.TOT	, PB120
+	O.EQ.P	OYSTER, 125		; The oyster creaks open, revealing nothing but oyster inside
+	.DSTROY	CLAM
+	.DROP	OYSTER
+	.DROP	PEARL, 105
+	.RSPKR	124			; A glistening pearl falls out of the clam and rolls away
+
+NOKEY:
+	.RSPKR	55		; You can't unlock the keys
+
+DNTUN4:	JMP 	DNTUND		;!!!o
+
+P105:	.RSPKR	105			; Your bottle is already full
+
+L9222:	.LIQLOC
+	.RSPKR	63			; There is nothing here with which to fill the vase
+1$:	N.TOTP	VASE, 29		; You aren't carrying it!
+	.RSPEAK	5			; The sudden change in temperature has delicately shattered the vase
+	.SPROP	VASE, 2
+	MOVB	#-1, FIXED + VASE - B.OBJ
+	JMP	L9024		;!!!o
+
+
+;; CHAIN
+L9048:	V.EQ	LOCK, L9049
+	.PRP0P	CHAIN, 37		; It was already unlocked
+	.PRP0P	BEAR, 41		; There is no way to get past the bear to unlock the chain, which is probably just as well
+	.SPROP	CHAIN, 0
+	CLRB	FIXED-1-B.OBJ+CHAIN
+	CLRB	FIXED-1-B.OBJ+BEAR
+	R1.NE	3, 1$			; R1: BEAR's prop
+	DECB	FIXED-1-B.OBJ+BEAR	; FIXED(BEAR) = -1
+	BR	8$
+1$:	.SPROP	BEAR, 2
+8$:	.RSPKR	171			; The chain is now unlocked
+
+
+
+L9012::	MOV	#BOTTLE, OBJ
+	N.HERE	BOTTLE, 33$
+	.LIQ
+	CMPB	R1, R5
+	BEQ	L9017
+33$:	N.TOTP	BOTTLE, 104		; You have nothing in which to carry it
+        N.PRP1	BOTTLE, P105
+;; Bottle must be empty, and some liquid available. (VASE is nasty.)
+.FILL.:	O.EQ	VASE, L9222	;9220
+	O.EQ	BOTTLE, 3$
+	O.NE.P	0, 109			; You can't fill that
+	N.HERE	BOTTLE, DNTUN2
+3$:	.LIQ
+	BNE	P105
+	.LIQLOC
+	BEQ	P106
+	MOV	R1, R2
+	SUB	#WATER, R2
+	ASL	R2
+	.SPROP	BOTTLE
+	N.TOT	BOTTLE, 4$
+	MOVB	#-1, PLACE-B.OBJ-1(R1)
+4$:	R1.EQP	OIL, 108		; Your bottle is now full of oil
+	.RSPKR	107			; Your bottle is now full of water
+
+
+
+;; CARRY, no object given yet. Ok if only one object present.
+.TAKE.:	BNE	9010$		;8010
+	.ATLOC
+	BEQ	DNTUN4
+	MOV	R2, OBJ
+	MOV	R2, R5
+	.NEXT
+	BNE	DNTUN4
+	N.MET	9010$
+	MOV	#5, R3
+5$:	CMPB	DLOC-1(R3), LOC
+	BEQ	DNTUN4
+	SOB	R3, 5$
+
+;; CARRY an object. Special cases for BIRD and CAGE (if BIRD in CAGE, can't take one without the other).
+;; Liquids also special, since they depend on status of BOTTLE.
+;; Also various side effects, etc.
+9010$:	.TOTP	, 24		; You are already carrying it!
+	TSTB	FIXED-B.OBJ-1(R5)
+	BNE	L9015
+	O.EQ	WATER, L9012
+	O.EQ	OIL, L9012
+L9017:	CMPB	HOLDNG, #7	;9018
+	BLT	9016$
+	.RSPKR	1		; You can't carry anything more. You'll have to drop something first
+9016$:	O.NE	BIRD, 9014$
+	N.PRP0	BIRD, 9014$
+	.TOTP	ROD, 26		; The bird was unafraid when you entered, but as you approach it becomes disturbed and you cannot catch it
+	N.TOTP	CAGE, 27	; You can catch the bird, but you cannot carry it
+	.SPROP	BIRD, 1
+9014$:	.PRP0	BIRD, 8$
+	O.NE	BIRD, 7$
+	.CARRY	CAGE
+	BR	8$
+7$:	O.NE	CAGE, 8$
+	.CARRY	BIRD
+8$:	.CARRY
+	O.NE.P	BOTTLE, 54	; Ok
+	.LIQ
+	BEQ	OK.1
+	MOVB	#-1, PLACE-B.OBJ-1(R1)
+OK.1:	.RSPKR	54		; Ok
+
+					; Origin of Chain
+L9049:	L.NE.P	130, 			; There is nothing here to which the chain can be locked
+	.PRP0	CHAIN, 1$
+	.RSPKR	34			; It was already locked
+1$:	.SPROP	CHAIN, 2
+	.DROP	CHAIN
+	MOVB	#-1, FIXED-1-B.OBJ+CHAIN
+REPL.8:	RETURN
+
+P106:	.RSPKR	106			; There is nothing here with which to fill the bottle
+
+
+L9015:	O.EQ	PLANT, PR115
+	O.EQ	BEAR, PR169
+	O.NE	CHAIN, P25
+	N.PR0P	BEAR, 170		; The chain is still locked
+P25:	.RSPKR	25			; You can't be serious!
+PR115:	.PROP	PLANT
+	BGT	P25
+	.RSPKR	115			; The plant has exceptionally deep roots and cannot be pulled free
+PR169:	.PROP	BEAR
+	SOB	R1, P25
+	.RSPKR	169			; The bear is still chained to the wall
+
+
+
+DNTUN2:	JMP	DNTUND
+
+
+;; Yields various snide remarks.
+.RUB.:	BEQ	DNTUN2
+	O.EQ.P	LAMP, 75	; Rubbing the electric lamp is not particularly rewarding
+	.RSPKR	76		; Peculiar. Nothing unexpected happens
+
+
+
+
+.CALM.:	BEQ	DNTUN2
+	.RSPKR	14			; I'm game. Would you care to explain how?
+
+.WALK.:	.RSPKR	43			; Where?
+
+
+;; No effect unless waving ROD at FISSURE.
+.WAVE.:	.CLOSNG	3$
+	N.AT	FISSUR, 3$
+	N.TOT	, 4$
+	O.NE.P	ROD, 42			; Nothing happens
+	.PRP0	FISSUR, 1$
+	.SPROP	FISSUR, 0
+	BR	2$
+3$:	.TOTP	, 42			; Nothing happens
+4$:	O.NE.P	ROD, 29			; You aren't carrying it!
+	N.TOTP	ROD2, 29		; You aren't carrying it!
+	BR	REPL.8
+
+1$:	.SPROP	FISSUR, 1
+2$:	.PSPEAK	FISSUR
+REPL.9:	BR	REPL.8
+
+
+;; If no object, or object is BOTTLE, assume contents of BOTTLE.
+;; Special tests for pouring WATER or OIL on PLANT or RUSTY DOOR.
+.POUR.:	BEQ	1$
+	O.NE	BOTTLE, 2$
+1$:	.LIQ
+	MOV	R1, OBJ
+	MOV	R1, R5
+2$:	O.EQ	0, DNTUN2
+	N.TOTP	, 29			; You aren't carrying it!
+	O.EQ	OIL, 3$
+	O.NE.P	WATER, 78		; You can't pour that
+3$:	.SPROP	BOTTLE, 1
+	CLRB	PLACE-B.OBJ-1(R5)
+	.AT	PLANT, 10$
+	N.AT.P	DOOR, 77		; Your bottle is empty, and the ground is wet
+	.PROP	DOOR
+	CMP	R5, #OIL
+	BNE	9$
+	.SPROP	DOOR, 3
+9$:	.RSPKR	114			; The hinges are quite thoroughly rusted now and won't budge
+
+10$:	O.NE.P	WATER, 112		; The plant indignantly shakes the oil off its leaves and asks, "Water?"
+	.PROP	PLANT
+	CMPB	(R1)+, (R1)+		; += 2
+	MOVB	R1, 5$ + 3		; Print PLANT's property+1
+5$:	.PSPEAK	PLANT, 0
+	R1.LO	6, 12$
+	SUB	#6, R1
+12$:	MOVB	R1, 13$ + 3		; Self-modifying
+13$:	.SPROP	PLANT, 0
+	ASR	R1
+	MOVB	R1, 14$ + 3		; Self-modifying
+14$:	.SPROP	PLANT2, 0
+	JMP	DESCR2		;!!!o
+
+
+
+.EAT.:	BEQ	.EAT.1
+;; Transitive: Food ok, some things lose appetite, rest are ridiculous.
+	O.EQ	FOOD, .EAT.2
+	MOV	R5, R2
+	JSR	R5, FNDLOC
+	.WORD	BADFD
+	BNE	RIDICU
+	.RSPKR	71			; I think I just lost my appetite
+RIDICU:	.RSPKR	145			; Don't be ridiculous!
+
+;; Intransitive: Assume food if present, else ask what.
+.EAT.1:	N.HERE	FOOD, DNTUN2
+.EAT.2:	.DSTROY	FOOD
+	.RSPKR	72			; Thank you, it was delicious!
+
+
+
+
+
+
+;; DRINK. If no object, assume WATER and look for it here.
+;; If WATER is in the BOTTLE, drink that, else must be at a water loc, so drink STREAM
+.DRNK.:	BNE	4$
+	.LIQLOC
+	R1.EQ	WATER, 6$
+	.LIQ
+	R1.NE	WATER, DNTUN2
+	N.HERE	BOTTLE, DNTUN2
+	BR	5$
+4$:	O.NE.P	WATER, 145		; Don't be ridiculous!
+5$:	.LIQ
+	R1.NEP	WATER, 145		; Don't be ridiculous!
+	N.HERP	BOTTLE, 145		; Don't be ridiculous!
+6$:	N.HERP	BOTTLE, 73		; You have taken a drink from the stream
+	.SPROP	BOTTLE, 1
+	CLRB	PLACE-1-B.OBJ+WATER
+	.RSPKR	74			; The bottle of water is now empty
+
+
+;; Attack. Assume target if unambiguous.  "throw" also links here.
+;; Attackable objects fall into two categories: enemies (SNAKE, DWARF, etc.) and others (BIRD, CLAM).
+;; Ambiguous if two enemies, or if no enemies but two others.
+;; Assumes R0=0
+.KILL.:	O.NE	0, 3$
+	MOV	#5, R3
+1$:	N.MET	2$
+	CMPB	DLOC-1(R3), LOC
+	BNE	2$
+	INC	R0			; R0: count of implicit targets
+	MOV	#DWARF, R3		; R3: object
+	BR	5$
+2$:	SOB	R3, 1$
+5$:	N.HERE	SNAKE, 7$
+	INC	R0
+	MOV	#SNAKE, R3
+7$:	N.AT	DRAGON, 8$
+	N.PRP0	DRAGON, 8$
+	INC	R0
+	MOV	#DRAGON, R3
+8$:	N.AT	TROLL, 9$
+	INC	R0
+	MOV	#TROLL, R3
+9$:	N.HERE	BEAR, 10$
+	N.PRP0	BEAR, 10$
+	INC	R0
+	MOV	#BEAR, R3
+10$:	DEC	R0
+	BGT	DNTUN1			; Ambiguity
+	MOV	R3, OBJ
+3$:	O.NE	BIRD, 9125$
+	IF.EQP	O.CLOD, 137		; Oh, leave the poor unhappy bird alone.
+	.RSPEAK	45			; The little bird is now dead. Its body disappears
+	JMP	DSTBRD		;!!!O
+9125$:	O.EQ.P	0, 44			; There is nothing here to attack
+	O.EQ.P	CLAM, 111		; The shell is very strong and is impervious to attack
+	O.EQ.P	OYSTER, 111		; The shell is very strong and is impervious to attack
+	O.EQ.P	SNAKE, 46		; Attacking the snake both doesn't work and is very dangerous
+	O.EQ.P	TROLL, 161		; The troll fends off your blows effortlessly
+	O.NE	DWARF, 4$
+	.CLOD	DROP1			; .CLOD	DISTD1
+	.RSPKR	49			; With what? Your bare hands?
+4$:	O.NE	BEAR, KILL6
+	.PROP	BEAR
+	ADD	#165 * 2 + 1, R1
+	ASR	R1			; With what?  Your bare hands?  Against HIS bear hands??
+	.RSPEAK				; | The bear is confused; he only wants to be your friend.
+REPL.B:	RETURN
+KILL6:	O.NE.P	DRAGON, 145		; Don't be ridiculous!
+	N.PR0P	DRAGON, 167		; For crying out loud, the poor thing is already dead!
+
+;;  Fun stuff for DRAGON. If he insists on attacking it, win!  set prop to dead,
+;;  move DRAGON to central Loc (still fixed), move RUG there (not fixed), and
+;;  move him there, too. Then do a NULL motion to get new description.
+	.YESNO	49, REPL.B			; With what? Your bare hands?
+	.PSPEAK	DRAGON, 1
+	.SPROP	DRAGON, 2
+	.SPROP	RUG, 0
+	.MOVE	<DRAGON+OBJMAX>, -1
+	.MOVE	<RUG+OBJMAX>, 0
+	.MOVE	DRAGON, 120		; (PLAC(DRAGON)+FIXD(DRAGON))/2
+	.MOVE	RUG, 120		; (PLAC(DRAGON)+FIXD(DRAGON))/2
+	MOV	#OBJMAX, R3
+2$:     MOVB	PLACE-1(R3), R1
+	R1.EQ	119, 3$
+	R1.NE	121, 4$
+3$:	.MOVE	-3, 120
+4$:	SOB	R3, 2$
+	MOV	#120, LOC
+LREPL2:	JMP	STAY
+
+DNTUN1: JMP	DNTUND
+
+
+
+
+;; THROW. Same as discard unless AXE. Then same as attack except ignore BIRD,
+;; and if DWARF is present then one might be killed.  (only way to do so!)
+;; AXE also special for DRAGON, BEAR, and TROLL.  Treasures special for TROLL
+.TOSS.:	CALL	RPLROD
+	CMP	OBJ, #B.OBJ+FSTTRS
+	BLO	5$
+	N.AT	TROLL, 5$
+;; Snarf a treasure for the TROLL
+	.DROP	, 0      ;9178
+	CALL	RMTROL
+	.RSPKR	159		; The troll catches your treasure and scurries away out of sight
+
+5$:     N.HERE	BEAR, 8$
+	O.EQ	FOOD, FEEDBE		;!!!O But throwing food is another story
+8$:	O.NE	AXE, .DROP.
+	MOV	#5, R3
+9$:	CMPB	DLOC-1(R3), LOC
+	BEQ	L9172
+	SOB	R3, 9$
+	N.AT	DRAGON, 10$
+	.PRP0	DRAGON, PR119
+10$:	N.AT	TROLL, L9173
+	.RSPEAK	158		; The troll deftly catches the axe, examines it carefully, and tosses it back
+	BR	L9175
+
+
+;; This'll teach him to throw the AXE at the BEAR!
+L9176:	.DROP	AXE
+	MOVB	#-1, FIXED + AXE - B.OBJ
+	.SPROP	AXE, 1
+	.JUGGLE	BEAR
+	.RSPKR	164		; The axe misses and lands near the bear where you can't get at it
+
+L9172:  PUSH	#L9175
+	.PCTP	33, 48		; You attack a little dwarf, but he dodges out of the way
+ 	CLRB	DSEEN-1(R3)
+ 	CLRB	DLOC-1(R3)
+ 	INC	(PC)+
+DKILL:	.WORD	-1		; Number of dwarves killed -1 (unused in scoring, needed for msg)
+ 	BEQ	PR56
+ 	.RSPKR	79		; You killed a little dwarf
+PR56:	.RSPKR	56		; You killed a little dwarf. The body vanishes in a cloud of greasy black smoke
+
+
+
+
+L9173:	N.HERE	BEAR, 1$
+	.PRP0	BEAR, L9176
+1$:	CLR	OBJ
+				; fallback
+;;  Discard object. "THROW" also comes here for most objects. Special cases for
+;;  BIRD (might attack SNAKE or DRAGON) and CAGE (might contain BIRD) and VASE.
+;;  Drop coins at vending machine for extra batteries.
+.DROP.:	CALL	RPLROD
+	O.NE	BIRD, L9024
+	N.HERE	SNAKE, L9024
+	.RSPEAK	30		; The little bird attacks the green snake, and in an astounding flurry drives the snake away
+DROP1:	.CLOD	DISTD1
+	.DSTROY	SNAKE
+	.SPROP	SNAKE, 1
+;; Set prop for use by travel options
+SETPRP:	.LIQ			;9021
+	BEQ	2$
+	CMP	R1, R5
+	BNE	1$
+	MOV	#BOTTLE, OBJ
+1$:	O.NE	BOTTLE	2$
+	CLRB	PLACE-1-B.OBJ(R1)
+2$:	O.NE	CAGE, 3$
+	.PRP0	BIRD, 3$
+	.DROP	BIRD
+3$:	O.NE	BIRD, 4$
+	.SPROP	BIRD, 0
+4$:	.DROP
+REPL.C:	RETURN
+
+PR119:	.RSPEAK	119		; The axe bounces harmlessly off the dragon's thick scales
+L9175:	.DROP	AXE
+	BR	LREPL2		; MOV LOC, R1;  JMP REPL2
+
+
+;; If BIRD, no seed. SNAKE, DRAGON, TROLL: quip. If DWARF, make him mad. BEAR, special.
+FEEDBE:	MOV	#BEAR, R5
+.FEED.:	BEQ	DNTUN1
+	O.EQ.P	BIRD, 9			; It's not hungry (it's merely pinin' for the fjords).  Besides, you have no bird seed
+	O.EQ	SNAKE, 7$
+	O.EQ	DRAGON, 11$
+	O.EQ.P	TROLL, 142		; Gluttony is not one of the troll's vices.  Avarice, however, is.
+	O.EQ	DWARF, 14$
+;9214:
+	O.NE.P	BEAR, 14		; I'm game.  Would you care to explain how?
+	.HERE	FOOD, 4$
+	.PRP0P	BEAR, 102		; There's nothing here it wants to eat (except perhaps you)
+	.PROP	BEAR
+	R1.EQP	3, 145			; Don't be ridiculous!
+4$:	.DSTROY	FOOD
+	.SPROP	BEAR, 1
+	CLRB	FIXED-1-B.OBJ+AXE
+	.SPROP	AXE, 0
+	.RSPKR	168			; The bear eagerly wolfs down your food
+
+
+;; DRAGON
+11$:	N.PR0P	DRAGON, 145		; Don't be ridiculous!
+	.RSPKR	102			; There's nothing here it wants to eat (except perhaps you)
+
+;; SNAKE
+7$:	IF.EQP	O.CLOD, 102
+	N.HERP	BIRD, 102		; There's nothing here it wants to eat (except perhaps you)
+	.RSPEAK	101			; The snake has now devoured your bird
+	.DSTROY	BIRD
+	.SPROP	BIRD, 0
+	JMP	INCTA2		; ++TALLY2	!!!o
+
+;; DWARF
+14$:	N.HERP	FOOD, 174		; There is nothing here to eat
+	INCB	DFLAG
+	.RSPKR	103			; You fool, dwarves eat only coal!  Now you've made him REALLY mad!!
+
+
+
+OK:	PUSH	#REPL
+P.OK:	.RSPKR	54		; Ok
+
+;; Just a joke.
+.HOUR.:	.RSPKR	201			; Colossal Cave is ALWAYS open, provided this is your PDP-11
+
+
+
+;; BREAK. Only works for MIRROR in repository and, of course, the VASE.
+.BREK.:	BEQ	.WAKE.			; DNTUND
+	O.NE	VASE, 1$
+	N.PRP0	VASE, 1$
+	TOT.DRO	VASE		;9282
+	.SPROP	VASE, 2
+	MOVB	#-1, FIXED-1-B.OBJ+VASE
+	.RSPKR	198			; You have taken the vase and hurled it delicately to the ground
+1$:	O.NE.P	MIRROR, 6		; It is beyond your power to do that
+	IF.NEP	O.CLOD, 148		; It is too far up for you to reach
+	.RSPEAK	197			; You strike the mirror  a resounding blow, whereupon it shatters into a myriad tiny fragments
+DISTD1:	BR	DISTDW
+
+OKDROP:	.RSPEAK	54		; Ok
+SETP.1:	BR	SETPRP
+
+
+
+L9024:	O.NE	COINS, 9025$
+	N.HERE	VEND, 9025$
+	.DSTROY	COINS
+	.DROP	BATTER
+	.PSPEAK	BATTER, 0
+	BR	REPL.C
+
+9025$:	O.NE	BIRD, L9026
+	N.AT	DRAGON, L9026
+	N.PRP0	DRAGON, L9026
+	.RSPEAK	126			; The little bird attacks the green dragon
+	JMP	DSTBRD
+
+L9026:	O.NE	BEAR, 9027$
+	N.AT	TROLL, 9027$
+	.RSPEAK	163			; The bear lumbers toward the troll, who lets out a startled shriek and scurries away
+	CALL	RMTROL
+	.SPROP	TROLL, 2
+	BR	SETP.1			; BR SETPRP
+
+9027$:	O.NE	VASE, OKDROP
+	L.EQ	96, OKDROP	;9028	; at Soft room
+	N.AT	PILLOW, 4$
+	.SPROP	VASE, 0
+	.PSPEAK	VASE, 1
+	BR	SETP.1
+4$:	.SPROP	VASE, 2
+	.PSPEAK	VASE, 3
+5$: 	MOVB	#-1, FIXED-1-B.OBJ+VASE
+	BR	SETP.1
+
+;; WAKE. Only use is to disturb the Dwarves.
+.WAKE.: BEQ	.FEED.			; BEQ DNTUN1
+	O.NE.P	DWARF, 145   ;9290	; Don't be ridiculous!
+	IF.NEP	O.CLOD, 145			; Don't be ridiculous!
+	.RSPEAK	199			; You prod the nearest dwarf, who wakes up grumpily, takes one look at you, curses, and grabs for his axe
+;; Oh dear, he's disturbed the dwarves
+; 19000:
+DISTDW:	.RSPEAK	136			; The resulting ruckus has awakened the dwarves
+	JMP	REPORT		;!!!O
+
+P91:	.RSPKR	91			; Sorry, but I no longer seem to remember how it was you got here
+P140:	.RSPKR	140			; You can't get there from here
+
+
+;; LOOK. Can't give more detail.
+;; Pretend it wasn't dark (though it may "now" be dark) so he won't fall into a pit while staring into the gloom.
+.LOOK.:	DEC	(PC)+
+DETAIL:	.WORD	3			; How often we've said "not allowed to give more detail"
+	BMI	1$
+	.RSPEAK	15			; Sorry, but I am not allowed to give more detail
+1$:	CLRB	WZDARK
+	MOV	LOC, R1
+	CLRB	ABB-1(R1)		; R1: LOC
+	BR	STAY.1
+
+DEAD2:	JMP	DEAD1	;!!!o
+
+;; Handle "Go BACK".
+;; Look for verb which goes from LOC to OLDLOC, or to OLDLC2 if OLDLOC has forced-motion.
+;; K2 saves entry -> forced LOC -> previous LOC.
+.BACK.:	MOV	(R4), R2		; R2 = OLDLOC
+	MOV	R2, R3  		; R3: former OLDLOC
+	.FORCED
+	BCC	1$
+	MOV	OLDLC2, R3
+1$:	MOV	(R4), OLDLC2		; OLDLC2  = OLDLOC
+	MOV	LOC, (R4)		; OLDLOC = LOC
+	CMP	R3, (R4)
+	BEQ	P91
+2$:	MOVB	R0, VERB		; Save last motion Verb
+	MOVB	(R5)+, R0
+	CMPB	R0, #B.MOVE		; R5: pointer to Travel Entry
+	BHI	2$
+	.RCOND
+	BEQ	P140
+	TST	R1			; R1: cond
+	BNE	2$
+	CMP	R2, R3
+	BNE	2$
+				; Fallback
+
+;; Figure out the new location
+;; Given the current location in "LOC", and a motion verb number in "k", put the new location in "NEWLOC".
+;; The current LOC is saved in "OLDLOC" in case he wants to retreat.
+;; The current OLDLOC is saved in OLDLC2, in case he dies.
+;; (If he does, NEWLOC will be LIMBO, and OLDLOC will be what killed him, so we need OLDLC2, which is the last place he was safe.)
+MOTION:	MOV	LOC, R1
+	MOV	#OLDLOC, R4
+	.KEY				; R5: pointer to Travel Entry
+	TSTB	(R5)
+	BEQ	DEAD2
+	V.EQ	NULL, STAY.1
+	V.EQ	BACK, .BACK.
+	V.EQ	LOOK, .LOOK.
+	V.EQ	CAVE, .CAVE.
+	MOV	(R4), OLDLC2		; OLDLC2 = OLDLOC
+	MOV	LOC, (R4)		; OLDLOC = LOC
+			; fallback
+;; Try next entry in Travel Table
+;; R5: pointer to the next entry
+MOVE:	CLR	R3
+MOVE1:	CLR	R0
+	BISB	(R5)+, R0
+	BEQ	MOVE9		; BEQ NAPPMO       End of Travel-table entry
+	CMP	R0, #B.MOVE
+	BHI	MOVE5
+	.RCOND
+	TST	R3
+	BEQ	MOVE6		; Auto-move
+	CMPB	(R5), #B.MOVE
+	BLOS	MOVE1
+MOVE.2:	BR	MOVE
+MOVE5:	INC	R3		; R3: non-Auto-move
+	CMPB	R0, VERB
+	BNE	MOVE1
+5$:	TSTB	(R5)
+	BEQ	MOVE9		; BEQ NAPPMO		; End of Travel-table entry
+	CMPB	(R5)+, #B.MOVE
+	BHI	5$		; Skip the rest moves
+MOVE8:	.RCOND
+MOVE6:	TST	R1
+	BEQ	MOVE12		; No condition
+	MOVB	R1, OBJ
+	MOV	R1, R0
+	CLRB	R0
+	SWAB	R0
+	SUB	#$PROB, R0
+	BNE	MOVE20
+	.PCT	, MOVE12
+	BR	MOVE7		; Find NEXT rule
+MOVE17:	DEC	R0		; R0: property value to compare
+	.PROP			; $PRN*
+	CMPB	R1, R0
+	BNE	MOVE12
+;; Find next condition
+MOVE7:	TSTB	(R5)
+MOVE9:	BEQ	NAPPMO		; End of Travel-table entry
+	CMPB	(R5), #B.MOVE
+	BHI	MOVE1
+	INC	R5
+	BR	MOVE8
+
+PR117:  .RSPEAK	117			; Something you're carrying won't fit through the tunnel with you
+	BR	STAY
+
+
+MOVE18:	SOB	R0, MOVE17
+	.AT	, MOVE12
+	BR	MOVTOT
+MOVE19:	SOB	R0, MOVE18
+MOVTOT:	.TOT	, MOVE12
+	BR	MOVE7
+MOVE20:	SOB	R0, MOVE19
+				; $UCND
+MOVE12:	MOV	R2, R1
+
+	SUB	#$CALL1, R2
+	BHI	MOVE4
+	BLO	JREPL2
+;; Travel 301. Plover-Alcove passage. Can carry only EMERALD.
+;; Note: travel table must include "useless" entries going through passage, which can never
+;; be used for actual motion, but can be spotted by "GO BACK".
+TRV301:	MOV	#99 + 100, R1
+	SUB	LOC, R1
+	MOVB	HOLDNG, R0
+	BEQ	JREPL2
+	SOB	R0, PR117
+	N.TOT	EMRALD, PR117
+JREPL2:	JMP	REPL2			;!!!O
+
+
+MOVE2:	.RSPEAK
+STAY.1:	BR	STAY
+
+L30309:	BNE	4$
+	.SPROP	TROLL, 1	;30310
+4$:	MOV	#117 + 122, R1
+	SUB	LOC, R1			; R1: opposite location via the Bridge
+	N.TOT	BEAR, JREPL2
+	.RSPEAK	162			; Just as you reach the other side, the bridge buckles
+	.SPROP	CHASM, 1
+	.SPROP	TROLL, 2
+	.DROP	BEAR
+	MOVB	#-1, FIXED-1 + BEAR-B.OBJ
+	.SPROP	BEAR, 3
+	MOV	R1, LOC
+	PUSH	#DEAD
+	P.MI	SPICES, INCTA2		; ++TALLY2; RETURN
+	RETURN
+
+;; CAVE. Different messages depending on whether above ground.
+.CAVE.:	L.LO	8, 1$
+	.RSPEAK	58			; I need more detailed instructions to do that
+	BR	STAY
+1$:	.RSPEAK	57			; I don't know where the cave is
+STAY:	MOV	LOC, R1			; Don't move
+	BR	JREPL2
+
+MOVE3:	SOB	R2, MOVE2
+;; Travel 303.  TROLL Bridge.  must be done only as special motion so that
+;; DWARVES won't wander across and encounter the BEAR.
+;; (They won't follow the player there because that region is forbidden to the PIRATE.)  if
+;; prop(troll)=1, he's crossed since paying, so step out and block him.
+;; (standard travel entries check for prop(troll)=0.)  special stuff for bear.
+TRV303:	.PROP	TROLL
+	SOB	R1, L30309
+	.PSPEAK	TROLL, 1
+	.SPROP	TROLL, 0
+	.MOVE	TROLL2, 0
+	.MOVE	<TROLL2+OBJMAX>, 0
+	.MOVE	TROLL, 117			; PLAC(TROLL)
+	.MOVE	<TROLL+OBJMAX>, 122		; FIXD(TROLL)
+	.JUGGLE	CHASM
+	BR	STAY.1
+
+
+
+MOVE4:	SOB	R2, MOVE3
+;; Travel 302. PLOVER transport. Drop the EMERALD (only use special travel if toting it),
+;; so he's forced to use the Plover-passage to get it out.
+;; Having dropped it, go back and pretend he wasn't carrying it after all.
+TRV302:	.DROP	EMRALD
+	BR	MOVE.2
+
+
+
+DSTBRD:	.DSTROY	BIRD
+	.SPROP	BIRD, 0
+	CMPB	PLACE-1-B.OBJ + SNAKE, PLAC-1-B.OBJ + SNAKE
+	BNE	RET.7
+INCTA2:	INCB	TALLY2
+RET.7:	RETURN
+
+
+
+
+;; Non-applicable motion. Various messages depending on word given.
+NAPPMO:	MOV	#DESCR, (SP)
+	MOV	VERB, R1
+	R1.LO	B.MOVE+43, 2$
+	R1.LOP	B.MOVE+50+1, 69		; E, W, N, S, NE, NW, SE, SW ?	- There is no way to go that direction
+2$:	V.EQ.P	UP, 69			; There is no way to go that direction
+	V.EQ.P	DOWN, 69		; There is no way to go that direction
+	V.EQ.P	FORWARD, 47      	; I am unsure how you are facing. Use compass points or nearby objects
+	V.EQ.P	LEFT, 47		; I am unsure how you are facing. Use compass points or nearby objects
+	V.EQ.P	RIGHT, 47		; I am unsure how you are facing. Use compass points or nearby objects
+	V.EQ.P	OUT, 11			; I don't know "IN" from "OUT" here. Use compass points
+	V.EQ.P	IN, 11			; I don't know "IN" from "OUT" here. Use compass points
+	V.EQ.P	FIND, 59		; I can only tell you what you see as you move about and manipulate things
+	V.EQ.P	INVENT, 59		; I can only tell you what you see as you move about and manipulate things
+	V.EQ.P	XYZZY, 42		; Nothing happens
+	V.EQ.P	PLUGH, 42		; Nothing happens
+10$:	V.EQ.P	CRAWL, 80		; Which way?
+P12:	.RSPKR	12			; I don't know how to apply that word here
+
+.SCOR.:	.RSPEAK	203			; If you were to quit now $COM you would score
+	CALL	RSCORE
+	CALL	PEOS
+	.YESNP	143, 54			; Do you indeed wish to quit now?
+	BR	REPORG
+
+.QUIT.:	.YESNP	22, 54			; Do you really want to quit now? ; Ok
+	BR	REPORG
+
+
+;; No effect unless you've got dynamite, which is a neat trick!
+.BLST.:	P.MI.P	ROD2, 67		; Blasting requires dynamite
+	IF.NEP	O.CLOD, 67		; Blasting requires dynamite
+	PUSH	#3$
+	MOV	#15, R5
+	.HERP	ROD2, 135		; There is a loud explosion, and you are suddenly splashed across the walls of the room
+	MOV	#35, R5
+	L.NE.P	115, 133		; You march through the hole and find yourself in the Main Office
+	MOV	#20, R5
+	.RSPEAK	134			; There is a loud explosion, and a twenty-foot hole appears in the far
+3$:	MOVB	R5, BONUS
+REPORT:	CLRB	GAVEUP
+REPORG:	.RSPEAK	139			; You scored
+	CALL	RSCORE
+	.RSPEAK	11			; , using
+	MOV	(PC)+, R1
+TURNS:	.WORD	0			; Tallies how many commands he's given (ignores YES/NO)
+	.P.U16
+	.RSPEAK	65			; turns.
+	MOV	#8, R1
+2$:	MOVB	CVAL-1(R1), R0
+	SUB	R0, R5
+	BLT	3$			; Assuming nobody achieves > 350 points
+	SOB	R1, 2$
+3$:	ADD	#$ROFF, R1
+	.RSPEAK
+	R1.EQ	$ROFF, 5$
+	NEG	R5
+	MOVB	R5, $FMORE
+	.RSPEAK	66			; To achieve the next higher rating, you need %d more point
+	DEC	R5
+	BEQ	4$
+	.P.CHR	's
+4$:	.P.CHR	'.
+5$:
+AEXIT: 	.EXIT
+	.WORD				; Reserver for BK-0010 exit
+
+
+.RESU.:	.RSPKR	62			; Use OS loader
+
+;; Intransitive only.  suppress long descriptions after first time.
+.BRF.:	MOVB	#255, ABBNUM
+	CLR	DETAIL
+	.RSPKR 	110			; Okay, from now on I'll only describe a place in full the first time, you come to it
+
+
+
+;; First tally up the treasures. Must be in building and not broken.
+;; Give the poor guy 2 points just for finding each treasure.
+RSCORE:	CLR	R5			; R5: Score
+	MOV	#NUMTRS, R4
+1$:	MOVB	BSCORE-1(R4), R0
+	ADD	R0, R5			; Add points for not unused hints, CLOSNG, CLOSED, GAVEUP and optionally BONUS
+	MOV	R4, R1
+	ADD	#B.OBJ-1+FSTTRS, R1
+	.PROP	-1
+	BLT	12$
+	BGT	11$
+	CMPB	PLACE+FSTTRS-2(R4), #LBUILD
+	BNE	11$
+	ADD	#12, R5			; += 12
+	CMP	R4, #CHEST-B.OBJ+1-FSTTRS
+	BLT	12$
+	BEQ	11$			; += 14 for CHEST
+	CMPB	(R5)+, (R5)+		; += 16 for >CHEST
+11$:	CMPB	(R5)+, (R5)+
+12$:	SOB	R4, 1$
+
+	CMPB	PLACE-1-B.OBJ+MAGZIN, #108	; Did he come to Witt's End as he should?
+	BNE	3$
+	INC	R5
+3$:	MOV	R5, R1
+	.P.U16
+	.RSPKR	204			; out of a possible 350
+
+;; Now look at how he finished and how far he got.
+;; MAXDIE and NUMDIE tell us how well he survived.
+;; DFLAG will tell us if he ever got suitably deep into the cave.
+;; CLOSNG still indicates whether he reached the endgame.
+;; And if he got as far as "Cave Closed" (indicated by "CLOSED"),
+;; then BONUS is zero for mundane exits or 133, 134, 135 if he blew it (so to speak).
+
+
+;; Replace ROD
+RPLROD:	N.TOT	ROD2, 2$
+	O.NE	ROD, 2$
+	.TOT	ROD, 2$
+	MOV	#ROD2, OBJ
+2$:	.TOT	, RET.6
+	TST	(SP)+
+	.RSPKR	29				; You aren't carrying it!
+
+;; Forced motion or from place forbidden to Pirate
+IFFORB:	.FORCLOC
+	BCS	1$
+	MOV	LOC, R2
+	.NOPIR
+	BNE	RET.6
+1$:	SEC
+RET.6:	RETURN
+
+;; Remove TROLLs
+RMTROL:	.MOVE	TROLL, 0
+	.MOVE	<TROLL+OBJMAX>, 0
+	.MOVE	TROLL2, 117			; PLAC(TROLL)
+	.MOVE	<TROLL2+OBJMAX>, 122		; FIXD(TROLL)
+	.JUGGLE	CHASM
+	RETURN
+
+.IF NE C$BK10
+;; Common BK-0010 initialization code: for original imaged and saved image
+BKINIC:	.P.CHR	C.EXTM			; Switch to Extended Memory Mode
+	MOV	#I.EMT, ^o30
+	INCB	$F.HID
+	MOV	#7*64, $CHARS
+	MOV	#6*64, $CURSO
+	MOV	#^o76600, $CURA
+	RETURN
+.ENDC	; C$BK10
+
+ACTION:	.WORD	.TAKE.,	.DROP.,	.SAY.,	.LOCK.,	.NOTH.,	.OPEN.,	.ON.,	.OFF.,	.WAVE.,	.CALM.
+	.WORD	.WALK.,	.KILL.,	.POUR.,	.EAT.,	.DRNK.,	.RUB.,	.TOSS.,	.QUIT.,	.FIND.,	.INVE.
+	.WORD	.FEED.,	.FILL.,	.BLST.,	.SCOR.,	.BRF.,	.READ.,	.BREK.,	.WAKE.
+ASAVE:	.WORD	RTSAVE
+	.WORD	.HOUR.,	.RESU.
+
+.EVEN
+;; Initial locations of objects  (Read-only section)
+PLAC:	.BYTE	LBUILD,	LBUILD,	8,	10,	11,	0,	14,	13,	94,	96
+	.BYTE	19,	17,	101,	103,	0,	106,	0,	0,	LBUILD,	LBUILD
+	.BYTE	0,	0,	109,	25,	23,	111,	35,	0,	97,	0
+	.BYTE	119,	117,	117,	0,	130,	0,	126,	140,	0,	96
+	.BYTE	18,	27,	28,	29,	30,  	0,	92,	95,	97,	100
+	.BYTE	101,	0,	119,	127,	130
+;; Is -1 for immovable objects (including the SNAKE), or = second Loc for two-placed objects.
+FIXD:	.BYTE	0,	0,	9,	0,	0,	0,	15,	0,	-1,	0
+	.BYTE	-1,	27,	-1,	0,	0,	0,	-1,	0,	0,	0
+	.BYTE	0,	0,	-1,	-1,	67,	-1,	110,	0,	-1,	-1
+	.BYTE	121,	122,	122,	0,	-1,	-1,	-1,	-1,	0,	-1
+	.BYTE	0,	0,	0,	0,	0,	0,	0,	0,	0,	0
+	.BYTE	0,	0,	121,	0,	-1
+
+
+;; some things lose appetite
+BADFD:	.BYTE	BIRD, SNAKE, CLAM, OYSTER, DWARF, DRAGON, TROLL, BEAR, 0
+
+
+HTCAVE:	.BYTE	8, 0											; Trying to get into Cave
+HTBIRD:	.BYTE	13, 0											; Trying to catch BIRD
+HTSNAK:	.BYTE	19, 0											; Trying to deal with SNAKE
+HTMAZE:	.BYTE	42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 80, 81, 82, 86, 87, 0	; Lost in Maze
+HTROOM:	.BYTE	99, 100, 101, 0										; Pondering Dark Room
+HTWITT:	.BYTE	108, 0											; At Witt's end
+
+;; Offsets of Hint Location tables
+HTOFF:	.BYTE	HTCAVE-HTCAVE, HTBIRD-HTCAVE, HTSNAK-HTCAVE, HTMAZE-HTCAVE, HTROOM-HTCAVE, HTWITT-HTCAVE
+
+;; Repository table
+;; Location, Object ! property (128 means -2, 0 means -1)
+RTABLE:	.BYTE	115, BOTTLE ! 128
+	.BYTE	115, PLANT
+	.BYTE	115, OYSTER
+	.BYTE	115, LAMP
+	.BYTE	115, ROD
+	.BYTE	115, DWARF
+	.BYTE	116, SNAKE ! 128
+	.BYTE	116, BIRD ! 128
+	.BYTE	116, CAGE
+	.BYTE	116, ROD2
+	.BYTE	116, PILLOW
+	.BYTE	115, MIRROR
+	.BYTE	0
+
+CVAL:	.BYTE	19, 30, 50, 50, 70, 30, 65, 36
+
+
+
+
+;; Locations with light
+LIGHTS:	;.BYTE	1, 2, 3, 4, 5, 6, 7, 8, 9, 10		; Determined by code
+	.BYTE	100, 115, 116, 126, 0
+
+;; Locations with WATER
+WATERS:	.BYTE	1, LBUILD, 4, 7, 38, 95, 113, 0
+
+;; PIRATE doesn't go here unless following player
+NOPIRA:	.BYTE	46, 47, 48, 54, 56, 58, 82, 85, 86, 122, 123, 124, 125, 126, 127, 128, 129, 130, 0
+
+
+
+$LIQUID::
+.BYTE	0,1,2,LBUILD,4,5,6,7,8,9,10,100,115,116,126, 0
+.BYTE	2,1,LBUILD,4,7,38,95,113,241,24, 0
+.BYTE	3,46,47,48,54,56,58,82,85,86,122,123,124,125,126,127,128,129,130, 0
+.BYTE	4,8, 0
+.BYTE	5,13, 0
+.BYTE	6,19, 0
+.BYTE	7,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,80,81,82,86,87, 0
+.BYTE	8,99,100,101, 0
+.BYTE	9,108, 0
+
+
+O.WD2	= WD2 - WD1
+O.OBJ	= OBJ - WD2
+O.VERB	= VERB - OBJ
+O.LOC	= LOC - VERB
+
+	.EVEN
+
+.EVEN
+
+
+
+.END	$START

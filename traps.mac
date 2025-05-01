@@ -1,0 +1,514 @@
+;;; Copyright (c) 2025 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com
+;;;
+;;; SPDX-License-Identifier: MIT
+;;;
+
+;; TRAP Handlers
+
+.TITLE	ADVENT
+
+.INCLUDE /macros.inc/
+
+.ASECT
+. = ^o14500
+
+; R4.OFF	= 0	; to avoid explicit 0
+R3.OFF	= 2
+R2.OFF	= 4
+R0.OFF	= 6
+PC.OFF	= 10
+R5.OFF	= 12
+ST.OFF	= 14	; First Word Before Stack Frame ;   Number Of Saved Bytes In Stack Frame
+
+.RADIX	10.
+
+;; Object 4-bit properties. 32 bytes
+PROPS:	.BLKB	20
+;;  Treasures, as noted earlier, are objects 41 through MAXTRS (currently 55).
+;;  Their props are initially -1, and are set to 0 the first time they are described.
+	.BYTE	-1, -1, -1, -1, -1, -1, -1, -1
+
+.EVEN
+
+GPROPB:	ADD	#PROPS * 2 - PLACE, R5		;!!!o
+	ASR	R5
+	MOVB	(R5), R3
+	RETURN				; K1801VM1 CF bug is mitigated by this instruction
+
+
+
+
+CARRY:	TSTB	PLACE-1-B.OBJ(R1)
+	BMI	9$
+	MOVB	#-2, FIXED-1-B.OBJ(R1)
+9$:	RETURN
+
+DROP:	MOVB	LOC, PLACE-1-B.OBJ(R1)
+	RETURN
+
+
+;; Returns:
+;;  R0: object (R4)+ ?? OBJ
+;;  R5: address of object in PLACE
+OB2PL.:	BISB	@(SP), R0		; Callers (R4)
+	BEQ	1$
+	CMPB	R0, #-3
+	BLO	2$
+	BEQ	3$
+	CLR	R0
+	BISB	R1, R0
+	BR	2$
+3$:	MOV	R3, R0
+	ADD	#B.OBJ, R0
+	BR	2$
+1$:	MOV	OBJ, R0
+2$:	MOV	R0, R0.OFF(SP)
+	ADD	#PLACE-1-B.OBJ, R0
+	MOV	R0, R5.OFF(SP)
+	INC	(SP)			; INC caller's R4
+	CMPB	(R0), #-1		; Toting?
+	BR	RTI.0
+
+;; Returns:
+;;   ZF=1 if R2 is found in (R5)+ table
+;;   ZF=0, CF=0 else
+FNDLOC:	MOV	(R5)+, R3
+FILOC1:	CMPB	R2, (R3)+
+	BEQ	9$
+	TSTB	(R3)
+	BNE	FILOC1
+	CLZ
+9$:	RTS	R5
+
+
+FILOC.:	MOV	LOC, R2
+	JSR	R5, FILOC1
+	BR	RTI.0
+
+L.HI.:	MOV	LOC, R2
+	BR	R2.HI.
+R1.HI.:	MOV	R1, R2
+R2.HI.:	CMPB	(R4)+, R2
+	BR	LOG.LS
+
+
+PCT.:	MOVB	(R4)+, R0
+	BNE	1$
+	MOVB	R1, R0
+1$:	PUSH	R1
+	.RND	100.
+	MOVB	-3(R4), R5		; R5: TRAP#
+	CMPB	R1, R0
+	POP	R1
+	BLO	LOG.Z			; With probability of R0 %
+	BR	LOG.NZ
+
+
+AT.:	.OB2PL
+	CMPB	OBJMAX(R5), LOC
+	BNE	HERE.1
+LOG.Z:	SEZ
+	BR	LOGIC1
+
+
+NMET.:  CMPB	DFLAG, (R4)+
+LOG.LS:	BLOS	LOG.Z           ; DFLAG < 2
+LOG.NZ:	CLZ
+LOGIC1:	BR	LOGIC
+
+
+HERE.:	.OB2PL
+	MOVB	R0, 2$ + 2
+2$:	.TOT	, LOG.Z
+HERE.1:	CMPB	(R5), LOC
+	BR	LOGIC
+
+
+
+DROP.:  .OB2PL
+DROP0:	MOVB	(R4)+, R2
+	BEQ	DROP.3
+	CMPB	-(R2), -(R2)		; R2 -= 2
+	BR	DROP1
+DROPR.:	MOV	OBJ, R5
+	ADD	#PLACE-1-B.OBJ, R5	; Pointer in PLACE
+DROP.3:	MOV	LOC, R2
+DROP1:	CMPB	(R5), #-1
+	BNE	DROP2
+	DEC	(PC)+
+HOLDNG:	.WORD	0			; Number of objects being carried
+DROP2:	MOVB	R2, (R5)		; Location, where to drop
+	BR	E4TR.5
+
+;; TOT.DRO
+TO.DR.:	.OB2PL
+	BEQ	DROP0
+SKIPR4:	TSTB	-(R4)
+JUGGL.:	TST	(R4)+
+	BR	E4TR.5
+
+CMPLO.:	TSTB	1(R4)
+	BNE	IFLOC.
+	MOV	(R4)+, R0
+        MOV	R4, PC.OFF(SP)
+	CMP	LOC, R0
+RTI.0:	BR	E.RTI
+
+
+SPROP.:	.OB2PL
+	MOVB	(R4)+, R0
+	BMI	1$
+	MOV	R0, R2
+1$:
+;; Set property of object (R5-PLACE+1) to value R2
+	CALL	GPROPB
+	BCC	2$
+
+	BIC	#^o360, R3
+	ASL	R2
+	ASL	R2
+	ASL	R2
+	ASL	R2
+	BR	3$
+2$:	BIC	#^o17, R3
+3$:	BIS	R3, R2
+	BR	DROP2		; MOVB R2, (R5); BR E.4TRP
+
+
+
+IF.NE.:	BISB	(R4)+, R0
+	TSTB	B.BVAR(R0)
+	BR	LOGIC
+
+IFLOC.:	ADD	#O.LOC, R0
+IFVER.: ADD	#O.VERB, R0
+IFOBJ.:	ADD	#O.OBJ, R0
+IFWD2.:	ADD	#O.WD2, R0
+IFWD1.:	CMPB	WD1(R0), (R4)+
+	BR	LOGIC
+
+
+YESNO.:	BISB	(R4)+, R0
+	BEQ	1$
+	MOV	R0, R1
+1$:	MOV	R1, R2.OFF(SP)
+	MOVB	R1, (PC)
+2$:	.RSPEAK	0
+	CALL	@AGTLN
+	MOVB	$BUF, R1
+	BIC	#^o40, R1
+	R1.EQ	'Y, LOGIC
+	R1.EQ	'N, LOG.NZ
+	.RSPEAK	18			; Please answer the question
+	BR	2$
+
+
+TOT.:	.OB2PL
+	BR	LOGIC
+
+PRPM.:	.OB2PL
+	CALL	GPROP
+	BMI	LOG.Z
+	BR	LOG.NZ
+
+
+PRP1.:	INC	R0			; R0: 1
+PRP0.:	MOV	R0, R2
+	.OB2PL
+	PUSH	#LOGIC2
+;; Get property of object (R5-PLACE+1)
+GPROP:	CALL	GPROPB
+	BCC	1$
+	ASR	R3
+	ASR	R3
+	ASR	R3
+	ASR	R3
+1$:	MOV	R3, R1
+	BIC	#^o177760, R1
+	CMP	R1, #14.
+	BLO	9$
+	BIS	#^o177760, R1		; 15. means -1, 14. means -2
+9$:	TST	R1
+	RETURN
+
+R1.EQ.:	MOVB	(R4)+, R2
+LOGIC2:	CMPB	R1, R2
+LOGIC:	MFPS	R3
+	MOVB	-3(R4), R5		; R5: TRAP#
+	BMI	1$        		; Check Bit 7 of TRAP# for boolean NOT
+	MTPS	R3
+	BNE	IFOBJ2
+	BR	2$
+1$:	MTPS	R3
+	BEQ	IFOBJ2
+2$:	ASLB	R5			; Check Bit 6 of TRAP#
+	BMI	RSPK0			; .RSPKR R0
+	MOVB	(R4), R0
+	ASL	R0
+	ADD	R0, R4
+IFOBJ2:	INC	R4
+	MOV	R4, PC.OFF(SP)
+	BR	E.RTI3
+
+PROP.:	.OB2PL
+	CALL	GPROP
+	MFPS	R3
+	BR	IFOBJ2
+
+RSPK0:	MOVB	(R4), (PC)		; Self-modifying
+	.RSPEAK	1
+	MOV	#RET.1, R4
+E4TR.5:	BR	E.4TRP
+
+CARRY.: .OB2PL
+	MOVB	(R4)+, R3	; R3: -1
+	CMPB	(R5), R3
+	BEQ	9$		; already carries
+	MOVB	R3, (R5)
+	INCB	HOLDNG
+9$:
+			;Fallback
+E.4TRP:	MOV	R4, PC.OFF(SP)
+E.RTI:	MFPS	R3
+E.RTI3:	MOV	R5.OFF(SP), R5
+	MOV	R3, R5.OFF(SP)
+	POP	R4, R3, R2, R0
+	RTI
+
+
+
+
+
+NOPIR.: JSR	R5, FNDLOC
+	.WORD	NOPIRA
+	BR	E.RTI
+
+
+
+BKRND:	MOV	$TMCNT, R1
+BKRND1:	MOV	(PC)+, R2
+5$:	.WORD	0
+     	ROLB	R2
+	SWAB	R2
+	ADD	(PC)+, R2
+4$:	.WORD	^o3337
+	ADD	#^o3337, 4$
+     	ADD	R2, R1
+     	MOV	R1, 5$
+1$:	SUB	(R4), R1		; (R4): n
+	BCC	1$
+	ADD	(R4)+, R1		; R1: rnd % n
+E4TR.2:	BR	E.4TRP
+
+
+
+PU16.:	CALL  	PSINT
+	DECB	EOW
+	BR	E.RTI
+
+FORLO.: MOV	LOC, R2
+FORCE.:	PUSH	R1
+	MOV	R2, R1
+	.KEY
+	CMPB	(R5), #B.MOVE + 2
+	BR	P1RTI		; POP R1; BR E.RTI
+
+
+DARK.:	MOV	LOC, R2
+	CMP	#10, R2
+	BHIS	8$		; Locations 1..10 are sunlighted
+	JSR	R5, FNDLOC
+	.WORD	LIGHTS
+	BEQ	8$
+	N.HERE	LAMP, 7$
+	PUSH	R1
+	.PROP	LAMP
+	MOV	R1, R0
+	POP	R1
+7$:	DEC	R0		; NF=1 if the LAMP is either not here or turned off
+8$:
+RTI.1:	BR	E.RTI
+
+NEXT.:	MOV	LOC, R1
+	BR	ATLC.1
+
+ATLOC.:	MOV	LOC, R1
+ATLC.:  MOV	#B.OBJ, R2
+ATLC.1:	SUB	#B.OBJ + <OBJMAX*2> + 1, R2
+1$:	INC	R2
+	BEQ	3$			; No more objects
+	CMPB	PLACE+<OBJMAX*2>(R2), R1
+	BNE	1$
+	ADD	#B.OBJ + <OBJMAX*2> + 1, R2
+3$:	MOV	R2, R2.OFF(SP)
+	BR	E.RTI
+
+
+LIQ.:	.PROP	BOTTLE
+	BEQ	LIQ.1
+	DEC	R1
+	BEQ	LIQ.2		; Empty
+LIQ.1:	ADD	#WATER, R1	; 21
+LIQ.2:	BR	E.RTI
+
+
+
+LIQLO.:	CLR	R1
+	MOV	LOC, R2
+	JSR	R5, FNDLOC
+	.WORD	WATERS
+	BEQ	LIQ.1
+3$:	CMP	LOC, #24	; Location with OIL
+	BNE	LIQ.2
+	INC	R1		; OIL == WATER + 1
+	BR	LIQ.1
+
+TRYGE.:	MOV	(R4)+, R1
+	N.HERE	, E4TR.2
+	MOV	R1, OBJ
+	MOV	R1, R5.OFF(SP)
+E4TR.3:	BR	E4TR.2
+
+RSPEA.:	MOV	#$SAYS, R2
+SPEAK.:	MOV	R2, R5
+	PUSH	R1
+	CALL	PSENT
+P1RTI:	POP	R1
+RTI.2:	BR	RTI.1
+
+
+RCOND.:	CLR	R1
+	BISB	-1(R5), R0	; R1: next LOC or Condition
+	BEQ	2$		; End of Travel-table entry
+	CMPB	R0, #$ESAY
+	BLOS	2$
+1$:	SWAB	R0
+	MOV	R0, R1
+	CMP	R1, #$UCND * 256
+	BEQ	3$
+        BISB	(R5)+, R1
+3$:	CLR	R0
+        BISB	(R5)+, R0
+2$:	MOV	R5, R5.OFF(SP)
+	MOV	R0, R2.OFF(SP)
+	BR	RTI.2
+
+DSTRO.:	.OB2PL
+	MOV	R0, R1
+	BR	MOVE1			; Move to 0
+
+MOVE.:	CLR	R1
+	BISB	(R4)+, R1
+MOVE1:	MOVB	(R4)+, R2
+	MOV	R4, PC.OFF(SP)
+MOVER.:	MOVB	R1, 2$ + 2
+	CMPB	(R2)+, (R2)+     	; +=2 the second arg of .DROP is `place+2`
+	MOVB	R2, 2$ + 3
+	MOVB	PLACE-1-B.OBJ(R1), R0
+	BEQ	2$
+	INC	R0
+	BEQ	2$
+	MOVB	R1, 1$ + 2
+1$:	.CARRY
+2$:	.DROP	0, 0
+RTI.3:	BR	RTI.2
+
+
+
+
+
+PSPEA.:	.OB2PL
+	PUSH	R1
+	MOVB	R0, 6$+2		;Self-mod code
+	SUB	#PLACE-1, R5
+	MOV	R5, R1
+	MOV	#$OBJECT, R5
+	CALL	FINDEN
+	ADD	R5, R2			; R2: upper bound of group
+	MOVB	(R4)+, R0
+	BEQ	6$
+	BGT	1$
+	CLRB	EOS
+	CLR	R0
+1$:	MOV	R0, R3
+	BR	5$
+6$:	.PROP	0
+	MOV	R1, R3
+	INC	R3
+5$:	PUSH	R2			; (SP): upper bound of group
+	INC	R3
+	MOV	#SEN.S * 64., R0	; no '!'
+	BR	4$
+3$:	MOV	#SEN.S * 64., R0	; no '!'
+	CALL	UNPACK
+	BEQ	4$
+	SOB	R2, 3$			; if --R2 == 0
+	MOV 	#SEN.E * 64., R0	; '!'
+4$:	SOB	R3, 3$
+	POP	R3			; R3: Upper bound of string group
+	PUSH	R5
+7$:	CMP	R5, R3
+	BEQ	8$
+	CMPB	(R5), #1
+	BLOS	8$
+	CALL	UNPACK
+	BR	7$
+8$:	MOV	R5, R2			; R2: upper bound of substring
+	POP	R5
+	PUSH	R4
+	CMP	R5, R2
+	BHIS	10$			; Empty property
+	TSTB	-1(R4)
+	BPL	9$
+	CLR	R0			; No dot for object name
+	CALL	PSENT1
+	.P.CHR	C.NL
+	BR	10$
+9$:	CALL	PSENT1
+10$:	POP	R4, R1
+E4TR.4:	BR	E4TR.3
+
+
+
+KEY.:	CMP	R1, #1	;!!!?o
+	BLT	RTI.3
+	MOV	#$TRAVEL, R5
+	BR	2$
+1$:	TSTB	(R5)+
+	BNE	1$
+2$:	SOB	R1, 1$
+	MOV	R5, R5.OFF(SP)
+	BR	RTI.3
+
+PUTS.:	MOV	(R4)+, R5
+	CALL	PUTS
+	BR	E4TR.4
+
+
+TRAPS:	.WORD	RSPEA.	, KEY.		, PU16.		, CARRY.	, IFOBJ.	, IFVER.	, PROP. 	, SPROP.
+	.WORD	DSTRO.	, HERE.		, DROP.		, SPEAK.	, IFWD2.	, IF.NE.	, R1.EQ.	, NOPIR.	; 10
+	.WORD	NEXT.	, ATLOC.	, ATLC.                                                                         		; 20
+ARND:	.WORD						RTRND
+	.WORD								PCT.		, FILOC.	, TRYGE.	, MOVE.
+	.WORD	TOT.	, RCOND.	, LIQ.		, LIQLO.	, PSPEA.	, CMPLO.	, YESNO.	, MOVER.	; 30
+	.WORD	JUGGL.	, DARK.		, AT.		, FORCE.	, FORLO.	, L.HI.		, R2.HI.	, DROPR.	; 40
+	.WORD	PRP0.	, OB2PL.	, IFWD1.	, PUTS.		, PRPM.		, NMET.		, R1.HI.	, PRP1.		; 50
+	.WORD	TO.DR.		 													; 60
+
+
+
+;; TRAP instruction handler.
+;; Saves all registers except R1
+I.TRAP:	PUSH	R0, R2, R3, R4
+	PUSH	R5.OFF(SP)		; PSW
+	MOV	R5, R5.OFF+2(SP)
+	MOV	PC.OFF+2(SP), R4	; Get PC after TRAP instruction.
+	PUSH	-2(R4)			; Decode TRAP instruction
+	BIC	#^o300, (SP)
+	ASL	(SP)
+	ADD	#TRAPS-<OP.TRAP * 2>, (SP)
+	MOV	@(SP)+, -(SP)
+	CLR	R0
+	RTI
+
+.END

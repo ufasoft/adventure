@@ -1,0 +1,467 @@
+;;; Copyright (c) 2025 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com
+;;;
+;;; SPDX-License-Identifier: MIT
+;;;
+
+.TITLE	ADVENT
+.SBTTL	I/O
+
+.INCLUDE /macros.inc/
+
+.ASECT
+. = ^o12500
+
+
+
+;; R5: start of data, R1: sentence#
+;; Returns:
+;;	R0: type
+;;	R2: length in bytes
+;;	R5: start of contents
+FIND1:  ADD	R2, R5
+FINDEN:	BIC	#177400, R1
+	MOVB	(R5)+, R2
+	PUSH	R2
+	BIC	#^o177700, R2
+	CMP	R2, #63.
+	BLO	1$
+	MOVB	(R5)+, R0
+	ADD	R0, R2
+1$:	POP	R0
+	SOB	R1, FIND1
+	RETURN
+
+
+
+P.PAR:	.P.CHR	C.SP
+	.P.CHR	'(
+	PUSH	#')
+	BR	P.DQU1
+
+
+
+P.DQU:	.P.CHR	C.SP
+	.P.CHR	'"
+	PUSH	#'"
+P.DQU1:	CLRB	EOW
+	CLRB	EOP
+	MOVB	(R5)+, R3
+1$:	PUSH	R3
+	CALL	UPWORD
+	POP	R3
+	SOB	R3, 1$
+	POP	R1
+	BR	PINT3
+
+P.ASC1:	.P.CHR
+;; $ASCIN handler
+P.ASC:  MOVB	(R5)+, R1
+	BPL	P.ASC1
+	NEG	R1
+	BR	PINT3		; .P.CHR; RETURN
+
+P.INT:	CALL	UNPACK
+	MOV	R2, R1
+PSINT:	.P.CHR	C.SP
+;; Print unsigned int in R1
+PINT::	PUSH	R1
+	CLR	R1
+1$:	INC	R1
+	SUB	#10., (SP)
+	BHIS	1$
+	DEC	R1
+	BEQ	2$
+	CALL	PINT
+2$:	POP	R1
+	ADD	#'0+10., R1
+PINT3:	.P.CHR
+	RETURN
+
+;; Print char
+;; R1: 5-bit char code.   R3: offset
+PCHR2:	ASR	R1
+	ASR	R1
+PCHR:	BIC	#177740, R1
+	BEQ	1$		; End of word
+	CMP	R1, #^o33
+	BNE	5$
+	.P.CHR	'2
+	BR	4$
+5$:	CMP	R1, #^o35	; '
+	BNE	3$
+	.P.CHR	C.QU
+	BR	4$
+3$:	ADD	R3, R1
+	.P.CHR
+4$:	IF.NE	O.UCAS, 2$
+	MOV	#'a-1, R3	; Next char is in lower case
+2$:	RETURN
+1$:	POP	R1
+	BR	RET.PW
+
+
+P.SUB1:	CLR	R2
+	BISB	(R5)+, R2
+P.SUB:	ADD	#8., R2
+	PUSH	R5
+	MOV	#$SUBS, R5		; Sub-sentences
+	MOV	R2, R1
+	CALL	PSENT
+	POP	R5
+	RETURN
+
+P.UCAS:	INCB	UCASE
+	RETURN
+
+
+P.SPEC:	MOVB	TSPEC+10.(R2), (PC)
+	BR	.
+PSPEC1:
+
+
+CAPIT:	INCB	EOS			; Capitalize
+PWORD1: TSTB	(PC)+
+EOP:	.WORD	0			; End of phrase
+	BEQ	2$
+	.P.CHR	C.SP
+2$:	CLRB	EOP
+	TSTB	EOW
+	BEQ	1$
+	.P.CHR	C.SP
+1$:	DECB	EOW
+PWORD3:	IF.NE	O.UCAS, 9$
+	TSTB	EOS
+	BEQ	10$
+9$:	MOV	#'A-1, R3		; Uppercase for first char
+	CLRB	EOS
+	BR	6$
+
+10$:	MOV	#'a-1, R3
+	BR	6$
+5$:	MOVB	(R4)+, R1
+	BEQ	5$			; Zero separators in Object/Verb tables
+	INC	R4
+	TSTB	R1
+	BPL	5$
+6$:	SOB	R2, 5$
+
+12$:	MOVB	(R4)+, R1
+	BEQ	12$			; Zero separators in Object/Verb tables
+	MOVB	R1, R0
+	CALL	PCHR2			; ASR R1; ASR R1; CALL PCHR
+	SWAB	R0
+	CLRB	R0
+	BISB	(R4)+, R0
+	MOV	R0, R1
+	ASR	R1
+	ASR	R1
+	ASR	R1
+	CALL	PCHR2
+	MOVB	R0, R1
+	CALL	PCHR
+	TST	R0
+	BPL	12$
+RET.PW:	DECB	EOW
+	CLRB	UCASE
+RET.5:	RETURN
+
+
+
+
+
+PUTS1:	.P.CHR
+;; Print string in R5
+PUTS:	MOVB	(R5)+, R1
+	BNE	PUTS1
+	.P.CHR	C.NL
+	BR	P.CAP		; INCB EOS; RETURN
+
+PSENT2:	PUSH	#PSENT3
+UPWORD:	PUSH	#PWORD
+;; Returns: R2: NWORD
+UNPACK:	CLR	R2
+	BISB	(R5)+, R2
+	CMPB	R2, #373
+	BLO	9$
+	SWAB	R2
+	BISB	(R5)+, R2
+	SUB	#^o175005, R2
+9$:	TST	R2
+	RETURN
+
+;; $THE handler
+P.THE:	MOV	#the, R2
+	CALL	PWORD
+	CLR	R2
+	BISB	(R5)+, R2		; R2: noun#
+	ADD	#$OOFF, R2
+;; Print word by number in R2
+PWORD:	SUB	#11., R2
+	BLO	P.SPEC			; Special methods
+	SUB	#5, R2
+	BLO	53$			; Single chars
+	SUB	#7., R2
+	BLOS	P.SUB			; "there is"
+	MOV	#$WORDS, R4
+	CMP	R2, #5
+	BLO	CAPIT			; Capitalize for I, I'm, I've
+	CMP	R2, #17.
+	BHI	PWORD1
+	CLRB	EOW			; Suffix
+	BR	PWORD3
+
+53$:	MOVB	$SCHAR + 7.(R2), R1
+	.P.CHR
+	CMPB	R1, #'.
+	BNE	3$
+	INCB	EOP
+	;!!!R .P.CHR	C.SP
+3$:	CMPB	R2, #-5
+	BCC	5$
+	CLRB	EOW
+	RETURN
+5$:	CMP	R2, #-1
+	BHIS	RET.2
+P.CAP:	INCB	EOS			; Capitalize next word
+RET.2:	RETURN
+
+P.HYPH:	.P.CHR	'-
+	BR	CLREOW
+
+P.SLA:	.P.CHR	'/
+	BR	CLREOW
+
+
+;; Print sentence
+;; R0:header byte  R1: num
+PSENT:	CALL	FINDEN
+	ADD	R5, R2
+PSENT1:	PUSH	R0, R2  		; (SP): upper bound
+PSENT3:	CMP	R5, (SP)
+	BLO	PSENT2
+	POP	R4, R4
+	BIC	#^o177477, R4
+	BEQ	RET.4			; None
+	SUB	#^o200, R4
+	BCS	PEOS			; .
+	BEQ	5$			; ?
+	.P.CHR	'!
+	BR	PEOS1
+5$:	.P.CHR	'?
+	BR	PEOS1
+PEOS:	.P.CHR	'.
+PEOS1:
+;!!!R	.P.CHR	C.CR
+	.P.CHR	C.NL
+	INCB	EOS
+CLREOW:	CLRB	EOW
+RET.4:	RETURN
+
+;; BK Invalid Instruction handler
+I.SPK1:	PUSH	R0, R1
+I.SPK2:	MOV	4(SP), R1		; R1: next instruction address
+	MOV	-(R1), R1		; Illegal opcode
+	TSTB	R1
+	BNE	1$
+	BISB	(SP), R1		; R1: caller's R1
+1$:	BIT	#^o400, R1
+	BEQ	I.SPK4
+	CMPB	R1, #C.NL		;!!!o?
+	BNE	PCHR.2
+	CLRB	EOW
+	INCB	EOS
+P.CR:	.P.CHR	C.CR
+PCHR.2:	.TTYOUT	R1
+PCHR.3:	BR	I.SPK8
+I.SPK4:	.RSPEAK
+	TST	R1
+	BPL	I.SPK8
+	MOV	#RET.1, 4(SP)		; Return
+I.SPK8:	POP	R1, R0
+9$:	RTI
+
+
+SKIPW1:	BNE	RET.1
+	INC	CURPOS
+SKIPWS:	PUSH	#SKIPW1
+;; Returns char in R4
+RDCHR:  MOVB	@CURPOS, R4
+	CMPB	R4, #C.SP
+RET.1:	RETURN
+
+
+
+
+
+;; Returns: R1: 3 chars, RADIX-40 encoded
+RDR40:	CLR	R1
+	MOV	#3, R0
+1$:	MOV	#5, R4
+4$:	ASL	R1
+	SOB	R4, 4$
+	CALL	RDCHR
+	BLOS	3$
+	INC	CURPOS
+	CMPB	R4, #'2
+	BNE	2$
+	MOV	#^o33, R4
+2$:	BICB	#^o340, R4
+	BISB	R4, R1
+3$:	SOB	R0, 1$
+	RETURN
+
+
+;; Returns WORDS in WD1, R2
+READ$:	CALL	@(PC)+
+AGTLN:	.WORD	GTLNRT
+				; LSB of R1 is 0
+	CALL	RDWORD
+	MOV	R2, WD1
+	MOV	CURPOS, INP2
+;; R4: pointer to input
+;; Returns: WORD # in R2
+;; Search by first 4 chars
+RDWORD:	CALL	SKIPWS
+	CALL	RDR40
+	CLR	R2
+	MOV	R1, R3		; R3: first triplet
+	BEQ	RET.3		; No word
+	CALL	RDR40		; R1: second triplet
+	BIC	#^o1777, R1	; Ignore 5,6th char. Original ADVENTURE considers only first 4 chars of word
+	BNE	1$
+	BIS	#^o100000, R3	; End-of-word sign
+1$:	CALL	RDCHR		; Skip rest of Word
+	BLOS	2$
+	INC	CURPOS
+	BR	1$
+2$:	MOV	#$VWORD, R5
+3$:	INC	R2
+4$:	CMP	R5, #EWORDS
+	BHIS	UNKWD
+	MOVB	(R5)+, R0
+	BEQ	3$
+5$:	CALL	RLOWB
+	CMP	R0, R3
+	BNE	6$
+	TST	R0
+	BMI	FNDWD		; Found 1..3-char word
+	CALL	RUBE16
+	MOV	R0, R4
+	BIC	#^o101777, R4	; Check for 4th char only
+	CMP	R4, R1
+	BEQ	FNDWD		; Found 4..5-char word
+6$:	TST	R0		; Skip the rest of Word
+	BMI	4$
+7$:	PUSH	#6$
+;; Read unaligned Big-endian uint16_t into R0
+RUBE16:	MOVB	(R5)+, R0
+RLOWB:	SWAB	R0		; Read low Byte
+	CLRB	R0
+	BISB	(R5)+, R0
+	RETURN
+UNKWD:	MOV	#-1, R2		; Unknown word
+FNDWD:	CMP	R2, #$EVSEQ
+	BLT	RET.3
+	ADD	#B.MOVE-$EVSEQ+2, R2
+RET.3:	RETURN
+
+.IF NE C$BK10
+
+GTLN10: MOV	#$BUF, R1
+	MOV	R1, CURPOS
+	CLRB	$F.HID			; Show Cursor
+	.P.CHR	'>
+	CLR	$KEY			; Clear Keyboard buffer
+	MOV	#C.NL*256. + 20., R2
+	EMT	^o10
+	INCB	$F.HID			; Hide Cursor
+	RETURN
+
+
+A.FILE	= 320
+
+BKSAVE:	MOV	#A.FILE, R1
+	MOV	#2, (R1)+		; WRITE FILE command
+	MOV	#ABKSTR, R2
+	MOV	R2, (R1)+		; address
+	MOV	#^o70000-ABKSTR, (R1)+	; length
+	MOV	#OP.BR + <BKINIT-ABKSTR-2/2>, (R2)+
+	MOV	#BKINIT, (R2)+
+	JMP	$ASKEX			; Ask for filename and Execute file operation
+.ENDC ; C$BK10
+
+
+
+
+.IF NE C$BK10
+I.EMT:	PUSH	R1, R0
+	MOV	4(SP), R1
+	CMP	-(R1), #OP.EMT + ^o16
+	BNE	3$
+	CMPB	R0, #C.NL
+	BNE	5$
+;; Clear cursor
+	MOV	$CURA, R1
+	MOV	#10., R0
+2$:	CLRB	(R1)
+	ADD	#^o100, R1
+	SOB	R0, 2$
+
+	MOV	#70000, R1
+	MOV	R1, $BAZVP
+6$:	MOV	9.*64.(R1), (R1)+		; Line Scroll
+	CMP	R1, #75500
+	BLO	6$
+	MOV	#76600, R0
+	MOV	R0, $CURA
+7$:	CMP	R0, #76700
+	BLO	4$
+	MOV	(R0), (R1)+
+4$:	CLR	(R0)+
+	TST	R0
+	BPL	7$
+	MOV	#600, $CURSO
+9$:	POP	R0, R1
+        RTI
+5$:	CMPB	R0, #$K.BS
+	BNE	8$
+12$:	MOV	#$BAZVP, R1
+	PUSH	(R1), R5
+	MOV	#-^o600, (R1)
+
+	MFPS	-(SP)
+	PUSH	#11$
+	JMP	@PRVEMT
+	EMT	16
+;	JSR	R4, $PSREG
+;	CALL	$OUTBS
+;	JSR	R4, $PWREG
+11$:
+	POP	R5, (R1)
+	BR	9$
+8$:	CMPB	R0, #C.SP
+	BLO	9$
+	CMP	$CURSO, #677
+	BLO	3$
+	MOV	#C.NL, R0
+	EMT	16
+3$:	POP	R0, R1
+	JMP	@(PC)+
+PRVEMT:	.WORD	$DEMT		; Previous EMT handler
+.ENDC	; C$BK10
+
+
+
+
+
+
+$SCHAR:	.ASCII	|-/.!?:,|
+
+TSPEC:	.SBYTE   P.UCAS-PSPEC1/2, P.THE-PSPEC1/2, P.SUB1-PSPEC1/2, P.DQU-PSPEC1/2, P.PAR-PSPEC1/2
+	.SBYTE	P.INT-PSPEC1/2, P.CAP-PSPEC1/2, P.ASC-PSPEC1/2, P.HYPH-PSPEC1/2, P.SLA-PSPEC1/2
+
+
+.EVEN
+
+
+.END

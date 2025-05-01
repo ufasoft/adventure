@@ -1,0 +1,1643 @@
+;;; Copyright (c) 2025 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com
+;;;
+;;; SPDX-License-Identifier: MIT
+;;;
+
+.TITLE	ADVENT
+.SBTTL	Text Database
+
+.INCLUDE /pdp11.inc/
+.INCLUDE /rt11.inc/
+.INCLUDE /k1801.inc/
+
+.INCLUDE /defcfg.inc/
+.INCLUDE /text.inc/
+
+;;!!!D
+.ASECT
+. = ^o16700
+
+.NLIST	ME
+
+;; Unaligned Big-endian Word
+.MACRO	.WORDU	w
+	v	= w
+	.IIF LT, v,	.BYTE	v & ^o77777 / ^o400 ! ^o200 , v & ^o377
+	.IIF GE, v,	.BYTE	          v / ^o400	    , v & ^o377
+.ENDM	.WORDU
+
+;; Encode w in RADIX-40
+;;    difference with standard PDP-11 RADIX-50:
+;;     33 -> '2'
+;;     34 -> '-'
+;;     35 -> '''
+;;
+.MACRO .WRAD40	w
+       	$ir = 0
+       	.NCHR	$cnt, ^|w|
+       	.IRPC	c, ^|w|
+       		$cn = -1
+       		.IIF	GE, ''c-'a, $cn = ''c - 'a + 1
+       		.IIF	EQ, ''c-'2, $cn = ^o33
+       		.IIF	EQ, ''c-'-, $cn = ^o34
+       		.IIF	EQ, ''c-C.QU, $cn = ^o35
+       		.IIF	LT, $cn,	.ERROR	"Invalid chars in the Word"
+
+       		.IF EQ $ir - 2
+       			.IIF	EQ, $cnt - 1, $cn = $cn	+ ^o100000	; set flag for last-word
+                        .WORDU	<<$c0 * ^o40 + $c1> * ^o40 + $cn>
+       			$ir = 0
+       		.IFF
+       			.IIF	EQ, $ir - 0, $c0 = $cn
+       			.IIF	EQ, $ir - 1, $c1 = $cn
+       			$ir = $ir + 1
+       		.ENDC
+       		$cnt = $cnt - 1
+       	.ENDR
+       	.IIF	EQ, $ir - 1, .WORDU	<$c0 * ^o2000 + ^o100000>
+       	.IIF	EQ, $ir - 2, .WORDU	<<$c0 * ^o40 + $c1> * ^o40 + ^o100000>
+.ENDM
+
+
+
+;; Define Word
+.MACRO	.WO	w, n
+	.WRAD40	w
+	.IIF	B, n,	w	= $NSEQ
+	.IIF	NB, n,	n	= $NSEQ
+	$NSEQ 	= $NSEQ + 1
+.ENDM	.WO
+
+.MACRO	.W	a b c d e f g h i j k l m n o p r s t u v w x y z
+	.IRP	sym, <a b c d e f g h i j k l m n o p r s t u v w x y z>
+		.IIF NB, sym	.WO	sym
+	.ENDR
+.ENDM	.W
+
+;; Define Sentence
+
+
+.MACRO	.SEN	a b c d e f g h i j k l m n o p r s t u v w x y z
+	.IRP	sym, <a b c d e f g h i j k l m n o p r s t u v w x y z>
+		.IF NB sym
+			$s251	= sym - 251.
+                	.IF	GE, $s251
+                		.BYTE	$s251 / 256. + 251., $s251 & 255.
+                	.IFF
+                		.BYTE	sym
+                	.ENDC
+		.ENDC
+	.ENDR
+.ENDM	.SEN
+
+.MACRO	.SENT	num, a b c d e f g h i j k l m n o p r s t u v w x y z
+	.IIF	NE num - $NSEQ	.ERROR "NSEQ number is inconsistent"
+	.SEN	a b c d e f g h i j k l m n o p r s t u v w x y z
+	$NSEQ 	= $NSEQ + 1
+	.BYTE	0
+.ENDM	.SENT
+
+.MACRO	.SE	num, a b c d e f g h i j k l m n o p r s t u v w x y z
+	.SEN	a b c d e f g h i j k l m n o p r s t u v w x y z
+	.BYTE	$SEP
+.ENDM	.SE
+
+
+.MACRO	.SENTA	typ, num, a b c d e f g h i j k l m n o p r s t u v w x y z
+	$$ABEG = .
+	.BYTE	0
+	.IIF	NE num - $NSEQ	.ERROR "$NSEQ number is inconsistent"
+	.SEN	a b c d e f g h i j k l m n o p r s t u v w x y z
+	$NSEQ 	= $NSEQ + 1
+.ENDM	.SENTA
+
+.MACRO	.SENTZ	typ, num, a b c d e f g h i j k l m n o p r s t u v w x y z
+	.SEN	a b c d e f g h i j k l m n o p r s t u v w x y z
+	.IIF	GE, .-$$ABEG-64	.ERROR "Too big Sentence"
+	$$AEND = .
+	. = $$ABEG
+	.BYTE	typ * 64. + $$AEND - $$ABEG - 1
+	. = $$AEND
+.ENDM	.SENTZ
+
+;; For long sentences
+.MACRO	.SENBA	typ, num, a b c d e f g h i j k l m n o p r s t u v w x y z
+	.BYTE	typ * 64. + 63.
+	$$ABEG = .
+	.BYTE	0
+	.IIF	NE num - $NSEQ	.ERROR "$NSEQ number is inconsistent"
+	.SEN	a b c d e f g h i j k l m n o p r s t u v w x y z
+	$NSEQ 	= $NSEQ + 1
+.ENDM	.SENBA
+
+.MACRO	.SENBZ	typ, num, a b c d e f g h i j k l m n o p r s t u v w x y z
+	.SEN	a b c d e f g h i j k l m n o p r s t u v w x y z
+	.IIF	LT, .-$$ABEG-64	.ERROR "Too small Sentence"
+	.IIF	GT, .-$$ABEG-191.	.ERROR "Too big Sentence"
+	$$AEND = .
+	. = $$ABEG
+	.BYTE	$$AEND - $$ABEG - 64.
+	. = $$AEND
+.ENDM	.SENBZ
+
+.MACRO	.SENTE	typ, num, a b c d e f g h i j k l m n o p r s t u v w x y z
+	$$ABEG = .
+	.BYTE	0
+	.IIF	NE num - $NSEQ	.ERROR "$NSEQ number is inconsistent"
+	.SENTZ	typ, num, a b c d e f g h i j k l m n o p r s t u v w x y z
+	$NSEQ 	= $NSEQ + 1
+.ENDM	.SENTE
+
+;; Statement
+.MACRO	.STATN	num, a b c d e f g h i j k l m n o p r s t u v w x y z
+	.SENTE	SEN.N, num, a b c d e f g h i j k l m n o p r s t u v w x y z
+.ENDM	.STATN
+
+;; Statement
+.MACRO	.STATM	num, a b c d e f g h i j k l m n o p r s t u v w x y z
+.SENTE	SEN.S, num, a b c d e f g h i j k l m n o p r s t u v w x y z
+.ENDM	.STATM
+
+;; Question
+.MACRO	.QUEST	num, a b c d e f g h i j k l m n o p r s t u v w x y z
+	.SENTE	SEN.Q, num, a b c d e f g h i j k l m n o p r s t u v w x y z
+.ENDM	.QUEST
+
+;; Exclamation
+.MACRO	.EXCLA	num, a b c d e f g h i j k l m n o p r s t u v w x y z
+	.SENTE	SEN.E, num, a b c d e f g h i j k l m n o p r s t u v w x y z
+.ENDM	.EXCLA
+
+;; Object Descriptor
+.MACRO	.OBJ	a b c d e f g h i j k l m n o p r s t u v w x y z
+	.IRP	sym <a b c d e f g h i j k l m n o p r s t u v w x y z>
+		.IIF NB, sym	.WO	sym
+	.ENDR
+	$VSEQ	= $VSEQ + 1
+	.BYTE	0
+.ENDM	.OBJ
+
+;; Verb Descriptor
+.MACRO	.VERB	q r s t u v w x y z
+;	.IIF	NE num - $NSEQ	.ERROR "$NSEQ number is inconsistent"
+;	$NSEQ 	= $NSEQ + 1
+	.IRP	sym, <q r s t u v w x y z>
+		.IIF NB, sym	.WO	sym
+	.ENDR
+	$VSEQ	= $VSEQ + 1
+	.BYTE	0
+.ENDM	.VERB
+
+.MACRO	.MOTIO	num name a b c d e f g h i j k l m n o p r s t u v w x y z
+	.IIF	NB, name, 	name	= $NSEQ - $OOFF
+	.IF	NB, num
+		.IRP	sym <a b c d e f g h i j k l m n o p r s t u v w x y z>
+			.IIF NB, sym	.WO	sym
+		.ENDR
+	.ENDC
+	$VSEQ	= $VSEQ + 1
+	.BYTE	0
+.ENDM	.MOTIO
+
+
+.RADIX	10.
+
+;; Substring IDs
+$IDUND	= 1
+$USCMP	= 2
+$IDNKN	= 3	; I don't know
+$UCRAW	= 4	; You have crawled
+$GLPEA	= 5
+$WMIST	= 6    ; of white mist
+$RUTRY	= 7
+$MARKS	= 8
+$CONGR	= 9
+$LROOM	= 10	; a large room
+$LTBRD	= 11	; Little bird
+$DEND	= 12	; Dead end
+$DFPSG	= 13	; passages, all different
+$IRDOR	= 14	; massive $COM rusty $COM iron door
+$CLASS	= 15	;
+$SWRAP	= 16
+$OLOOK	= 17
+$MDUST	= 18
+;$CROSS	= 19
+$OEXIT	= 20
+$BEANS	= 21
+$EW	= 22
+$KILL	= 23
+$NS	= 24
+$WATER	= 25
+$FIT	= 26
+$FOREST	= 27
+$ATTHE	= 28
+$TWIST	= 29
+$URINT	= 30	; You are in the
+$S115B	= 31
+$S126A	= 32
+$S126B	= 33
+$S126C	= 34
+$S115A	= 35
+$HMISTS	= 36
+$HKING	= 37
+$DIM	= 38	; Your lamp is getting dim
+$LWPSG	= 39	; low wide passage
+$FILWI	= 40
+$SECRC	= 41	; You are in a secret canyon which exits to $THE NORTH. and east
+$GREEN	= 42	; green fierce snake
+$SOFT	= 43	; Soft Room
+$TWOPI	= 44	; Twopit Room
+$SLAB	= 45	; Slab Room
+$BOTTL	= 46	; Your bottle is
+$BTFUL	= 47	; Your bottle is now full of
+$BARRE	= 48	; Barren Room
+$STRNG	= 49	; You don't have anything strong enough to open the
+$PUTDN	= 50	; I advise you to put down the
+$LHALL	= 51	; end of Long Hall
+$UINAN	= 52	; You are in an
+$SPELT	= 53	; "Spelunker Today"
+$URON	= 54	; You are on
+$SECCY	= 55	; secret canyon
+$ACHIE	= 56	; To achieve the next higher rating
+$WITT	= 57	; Witt's End
+$BACK	= 58	; back in the main passage
+$HELP	= 59	; Do you need help getting out of
+$ROD	= 60	; A three foot black rod with a rusty star on an end lies nearby
+$OFFICE	= 61	; Main Office
+
+$WORDS::
+$NSEQ = 24
+;; Capitalized
+.WO	i'd	, I.D
+.WO	i'm	, I.M
+.WO	i've	, I.VE
+.WO	i
+
+$SUFF:
+$NSEQ = 28
+.WO	able	, $ABLE
+.WO	s	, $S
+.WO	es	, $ES
+.WO	ing	, $ING
+.WO	ed	, $ED
+.WO	d	, $D
+.WO	ly	, $LY
+.WO	'll	, $.LL
+.WO	n't	, $N.T
+.WO	ous	, $OUS
+.WO	less	, $LESS
+.WO	's	, $.S
+.WO	tion	, $TION
+
+$NSEQ = 41
+
+;;	Frequent words
+.WO	can't	, CAN.T
+.WO	don't	, DON.T
+.WO	it's	, IT.S
+.WO	you'd	, YOU.D
+.WO	you're	, YOU.RE
+.WO	you've	, YOU.VE
+
+.W	a	an	and	as	at	away	back	be	but	by	can	end	feet	from	has	have	here
+.W	is	it	large	leads	little	maze	not	now	of	over	passage	room	side	small	some
+.W	that	the	there	this	through	to	way	which	with	you	your
+
+$SWORD:
+
+$VWORD::
+
+$AVERB::
+$VOFF	= $NSEQ
+$VSEQ	= 1
+
+.VERB	carry	take	keep	catch	steal	captur	get tote
+.VERB	drop	releas	free	discarded	dump
+.VERB	say	chant	sing	utter	mumble
+.VERB	unlock	open
+.VERB	nothing
+.VERB	lock	close
+.VERB	light	on
+.VERB	extinc	off
+.VERB	wave	shake	swing
+.VERB	calm	placa	tame
+.VERB	walk	run	travel	go	proceed	continue	explore	goto	follow	turn
+.VERB	attack	kill	fight	hit	strike
+.VERB	pour
+.VERB	eat	devour
+.VERB	drink
+.VERB	rub
+.VERB	throw	toss
+VQUIT	= $NSEQ
+.VERB	quit
+.VERB	find	where
+.VERB	inventory
+.VERB	feed
+.VERB	fill
+.VERB	blast	detona	ignite	blow
+.VERB	score
+.VERB	brief
+.VERB	read	peruse
+.VERB	break	shatter	smash
+.VERB	wake	disturb
+.VERB	suspen	pause	save
+.VERB	hours
+.VERB	restor	resume
+.VERB	fee
+.VERB	fie
+.VERB	foe
+.VERB	foo
+.VERB	fum
+
+
+$SUBJ::
+; $NSEQ	= 1001
+
+$OOFF	= $NSEQ
+$OVSEQ	= $VSEQ
+
+.OBJ	keys	key
+.OBJ	lamp	headli	lantern
+
+GRATE.	= $NSEQ - $OOFF
+.OBJ	grate
+
+CAGE.	= $NSEQ - $OOFF
+.OBJ	cage
+
+.OBJ	rod
+.OBJ	rod		; MUST BE NEXT OBJECT AFTER "REAL" ROD
+
+STEPS.	= $NSEQ - $OOFF
+.OBJ	steps
+
+BIRD.	= $NSEQ - $OOFF
+.OBJ	bird
+
+DOOR.	= $NSEQ - $OOFF
+.OBJ	door
+
+.OBJ	pillow	velvet
+
+SNAKE.	= $NSEQ - $OOFF
+.OBJ	snake
+
+FISSU.	= $NSEQ - $OOFF
+.OBJ	fissure
+
+.OBJ	table
+
+CLAM.	= $NSEQ - $OOFF
+.OBJ	clam
+
+OYSTE.	= $NSEQ - $OOFF
+.OBJ	oyster
+
+MAGAZ.	= $NSEQ - $OOFF
+.OBJ	magazine	issue	spelunker
+
+DWARV.	= $NSEQ - $OOFF
+.OBJ	dwarves dwarf
+
+.OBJ	knife	knives
+.OBJ	food	ratio
+
+BOTTL.	= $NSEQ - $OOFF
+.OBJ	bottle	jar
+
+WATER.	= $NSEQ - $OOFF
+.OBJ	water	 h2o
+
+OIL.	= $NSEQ - $OOFF
+.OBJ	oil
+
+MIRRO.	= $NSEQ - $OOFF
+.OBJ	mirror
+
+PLANT.	= $NSEQ - $OOFF
+.OBJ	plant	 beans
+
+.OBJ	plant		; MUST BE NEXT OBJECT AFTER "REAL" PLANT
+.OBJ	stalactite
+
+SHADO.	= $NSEQ - $OOFF
+.OBJ	shadow	figure
+
+AXE.	= $NSEQ - $OOFF
+.OBJ	axe
+
+.OBJ	drawing
+
+PIRAT.	= $NSEQ - $OOFF
+.OBJ	pirate
+
+DRAGO.	= $NSEQ - $OOFF
+.OBJ	dragon
+
+CHASM.	= $NSEQ - $OOFF
+.OBJ	chasm
+
+TROLL.	= $NSEQ - $OOFF
+.OBJ	troll
+.OBJ	troll		; MUST BE NEXT OBJECT AFTER "REAL" TROLL
+
+BEAR.	= $NSEQ - $OOFF
+.OBJ	bear
+
+.OBJ	message
+
+VOLCA.	= $NSEQ - $OOFF
+.OBJ	volcano	 geyser
+
+.OBJ	machine	vending
+
+BATTE.	= $NSEQ - $OOFF
+.OBJ	batteries
+
+.OBJ	carpet	moss
+
+;; Treasures
+.OBJ	gold	nugget
+.OBJ	diamonds
+.OBJ	silver	bars
+.OBJ	jewel
+.OBJ	coins
+.OBJ	chest	box	treasure
+
+.OBJ	eggs	egg	nest
+.OBJ	trident
+
+VASE.	= $NSEQ - $OOFF
+.OBJ	vase	ming	shard	potter
+
+.OBJ	emerald
+.OBJ	platinum	pyramid
+.OBJ	pearl
+.OBJ	rug	persian
+.OBJ	spice
+
+CHAIN.	= $NSEQ - $OOFF
+.OBJ	chain
+
+
+.VERB	sesame	abra	shazam	hocus	pocus
+
+TREES.	= $NSEQ - $OOFF
+.VERB	trees
+.VERB	dig	excav
+
+.VERB	lost
+
+MIST.	= $NSEQ - $OOFF
+.VERB	mist
+
+.VERB	fuck
+.VERB	stop
+.VERB	info	help
+.VERB	swim
+
+$MOTIO::
+$MOFF	= $NSEQ
+
+
+$EVERB::
+
+$EVSEQ	= $VSEQ
+$VSEQ	= B.MOVE + 2
+
+.MOTIO	2,	ROAD.,	road	hill
+.MOTIO	3,	,	enter
+.MOTIO	4,	,	upstr
+.MOTIO	5,	,	dnstr
+.MOTIO	6,	FORES.,	forest
+.MOTIO	7,	,	forwar	continue	onward		;!!!? continue
+.MOTIO	8,	,	backxx	retrea	return			; Duplicates `back`, for input only
+.MOTIO	9,	,	valley
+.MOTIO	10,	,	stair
+.MOTIO	11,     EXIT.,	exit	leave	out	outsi
+.MOTIO	12,	BUILD.,	building	house
+.MOTIO	13,	,	gully
+.MOTIO	14,	STREA.,	stream
+.MOTIO	15,	ROCK.,	rock
+.MOTIO	16,	,	bed
+.MOTIO	17,	,	crawl
+.MOTIO	18,	,	cobbles
+.MOTIO	19,	,	inward	inside	in
+.MOTIO	20,	SURFA.,	surface
+.MOTIO	21,	,	null	nowhere
+.MOTIO	22,	DARK.,	dark
+.MOTIO	23,	,	pass	tunnel
+.MOTIO	24,	,	low
+.MOTIO	25,	CANYO.,	canyon
+.MOTIO	26,	,	awkward
+.MOTIO	27,	,	giant
+.MOTIO	28,	,	view
+.MOTIO	29,	,	u	up	upward	above	ascend
+.MOTIO	30,	,	d	down	descen
+.MOTIO	31,	PIT.,	pit
+.MOTIO	32,	,	outdoo
+.MOTIO	33,	,	crack
+.MOTIO	34,	,	steps
+.MOTIO	35,	DOME.,	dome
+.MOTIO	36,	LEFT.,	left
+.MOTIO	37,	RIGHT.,	right
+.MOTIO	38,	HALL.,	hall
+.MOTIO	39,	,	jump
+.MOTIO	40,	,	barren
+.MOTIO	41,	,	overxx					; Duplicates `over`, for input only
+.MOTIO	42,	,	across
+.MOTIO	43,	EAST.,	east	e
+.MOTIO	44,	WEST.,	west	w
+.MOTIO	45,	NORTH.,	north	n
+.MOTIO	46,	SOUTH.,	south	s
+.MOTIO	47,	,	ne
+.MOTIO	48,	,	se
+.MOTIO	49,	,	sw
+.MOTIO	50,	,	nw
+.MOTIO	51,	,	debris
+.MOTIO	52,	HOLE.,	hole
+.MOTIO	53,	WALL.,	wall
+.MOTIO	54,	,	broken
+.MOTIO	55,	,	y2
+.MOTIO	56,	,	climb
+.MOTIO	57,	,	look	examin	touch	describe
+.MOTIO	58,	FLOOR.,	floor
+.MOTIO	59,	,	roomxx					; Duplicates `room`, for input only
+.MOTIO	60,	,	slit
+.MOTIO	61,	,	slab
+.MOTIO	62,	,	xyzzy
+.MOTIO	63,	,	depression
+.MOTIO	64,	ENTRA.,	entrance
+.MOTIO	65,	,	plugh
+.MOTIO	66,	,	secret
+.MOTIO	67,	CAVE.,	cave
+.MOTIO	68,	,	fork
+.MOTIO	69,	,	cross
+.MOTIO	70,	,	bedquilt
+.MOTIO	71,	,	plover
+.MOTIO	72,	,	oriental
+.MOTIO	73,	CAVER.,	cavern
+.MOTIO	74,	SHELL.,	shell
+.MOTIO	75,	,	reservoir
+.MOTIO	76,	MAIN.,	main
+
+
+EWORDS::
+
+
+
+;; --- General words
+
+.W	able	about	accept	achieve	active	additional	adventure	advis	advise
+.W	aflame	afraid	after	again	against
+.W	ahead	air
+.W	alabaster	alcove	alike	alive	all	allow	almost	alone	along	already	also	although	always
+.W	am	amateur
+.W	ancient	announces	another	answer	anteroom	any	anything	anyway	anywhere
+.W	apparent	appari	appetite	app	appears	approach
+.W	arched	are	aren	around	ash	ask	astounding	atten	attract	avail	avarice	avoid	awaken
+.W	b	ban	bank	bare	barred	bathe
+.W	beam	beanstalk	bearded	becom	bedrock	been	before	better
+.W	behind	believe	bellow	below	beneath	bends	berry	beside	best	between	beyond
+.W	big	birch	bit	bivalv	bizarre
+.W	black	blame	blast	blind	blister	block	blocked	blood	booty	bring	broke	burying
+.W	body	bone	bounc	both	bottom	boulders	brass	breath	brick	bridge	brimstone	brink
+.W	bubble	buckl	budge	bundle	bur	burns	burnt	bushes	bypass
+.W	c	call	came	cannot	care	carefully	carrying	carved
+.W	cascad	cau
+.W	ceiling	center	chamber	change	chaos	cheer	cheerful	cheese	chortl	cinder	circular
+.W	clamber	class	clean	clear	climb	closed	closing	cloud	clue	clumsy
+.W	coal	cold	collap	collec	colossal	column	com	combin	come	company	compas	complex	compos
+.W	concrete	confused	congratulations	connect	conquer	consider	construc	contains	contented
+.W	coral	corner	corridor	cost	cough	could	cover
+.W	craft	crash	creaks	cri	crossover	crude	cry	crystal	currently	curs	curtains
+.W	damp	danger	daresay	darkness	day
+.W	dead	deal	dear	decent	declar	deep	deftly	delicate
+.W	delici	dense	depths	desperate	destroy	detail	detour	devil
+.W	diameter	did	different	digg	dim
+.W	direction	dirt	dirty	disappears	discover	distance
+.W	do	dodges	dollar	done	downstream	downward
+.W	drive	dropp	drowns	dry	dull	dust	dusty	dwarvish	dynamite
+.W	each	eager	ear	eastern	easy	echoes	edge	eerie
+.W	effect	effort	eight	either	electric	elsewhere	elv	embedd	emerge	empty
+.W	encrusted	engulf	enorm	enough	entire	enton	erupts
+.W	even	every	everything	everywhere	evident
+.W	except	excit	exits	expect	experienc	explain	explosion	extend	extremely	ey
+
+.WO	adventurer	, ADVNER
+.WO	appearance	, APPRNC
+.WO	complete	, CMPLTE
+.WO	considerably	, CNSDLY
+.WO	continuously	, CONTLY
+.WO	descrip		, dscrtn
+.WO	directly	, DRCTLY
+.WO	dwarves'	, DWARS.
+.WO	exceptional	, xcepti
+.WO	explosive	, EXPLIV
+.WO	pinin'		, PININ.
+.WO	reincarna	, reinc1
+.WO	reincarnat	, reinc2
+.WO	splendor	, spldor
+.WO	shadowy		, SHADWY
+.WO	somewhat	, SMWHAT
+.WO	streambed	, stmbed
+.WO	stretches	, STTES
+.WO	stretching	, STTING
+.WO	underside	, undsid
+
+.W	fac	fade	faint	fall	fallen	far	farthest	feature	fed	fell	fends	feroci	few
+.W	fierce	fire	first	fit	five	fjords	flash	flicker	flowery	flows	flurry
+.W	fool	foot	for	forebo	forma	found
+.W	fragments	fre	frequent	fresh	friend	friend	frighten	fro	front	frozen
+.W	full	furi	further
+.W	game	gasp	general	gentle	gently	gets	getting	gigantic	giv	give
+.W	glare	glimps	glisten	gloom	glow	gluttony	goes	golden	good	goodness	gorge	got	gotten	gouts
+.W	grabs	grandmaster	greasy	great	green	groan	ground	grove	grow	growth	grumpi	grunt
+.W	hands	hang	happens	har	harden	hardwood	harm	having
+.W	he	hea	heap	heard	heat	heavy	hellish	hereabout
+.W	hide	hie	high	higher	him	himself	hinges	hint	his	hmmm
+.W	hold	holes	hollow	hot	how	however	hungry	hurled	huge
+.W	identify	if	imbedd	immediately	immense	impervi	impractical
+.W	incandescence	inch	incline	includ	indeed	indicate	indignant	indistinctly
+.W	infernal	inscrip	insist	instea	instructions	interest	into
+.W	iron	island	its
+.W	jagged	jewelry	joins	jumble	junction	junior	just
+.W	king	knees	know	known
+.W	lake	lands	larger	later	lava
+.W	lead	leading	leav	leaves	lends	less	let	level
+.W	liberty	lies	life	like	likely	limestone	lin	lit	littered
+.W	loader	loca	locked	long	longer	looks	loud	louder	luck	lumber	lying
+.W	macabre	mad	made	magic	magnificent	make
+.W	manipulate	many	maple	march	mark	mas	massive	master	matter	may
+.W	me	means	merely	meself
+.W	midair	midway	might	minerals	miss	mists	misty
+.W	molten	more	most	mount	mountain	move	much	mud	murky	murmuring	must	my	myriad	mysteri
+.W	name	narrow	nasty	near	nearby	nearest	neat	necessary	neck	need	never	next	new
+.W	no	noise	noisi	nondescript	none	northeast	northwest	note	novice	number	nursery
+.W	o	oaf	oak	objects	obscur	obvi	obviously	occasional	occupi	odd	office	oh	okay	old	ominously
+.W	once	one	only	opaque	or	orange	other	outer	outside	overhead	overlook	own
+.W	pair	path	parallel	part	particularly	past	pay	peculiar	peer	perhaps
+.W	pile	pine	pip	pitch	place	placid	please	plugg	plummets	plus
+.W	point	points	pok	poof	pool	poor	possible	posted	pounc	pours	power
+.W	precious	prefer	prepar	probab	prod	profusion	program	progress	prompt	provided
+.W	puff	pulled	pure	pursuit	put
+.W	qualifies	question	quick	quiet	quite
+.W	ragged	ran	random	rank	rapid	rare	rat	rating	rather	reach	reads	really	recall	recent	receive	recommend
+.W	record	red	refocu	refuses	region	reincarnate	relatives	remember	remnants	remote	repeat	replac	requires
+.W	repository	resemble	resoun	resources	respectfully
+.W	rest	restrict	result	reveal	reverberat	reward
+.W	rhinocero	rickety	ridicul	ris	risk	river	roar	rolls	roof	roots	rocky	round	rough	row
+.W	rubb	rubble	ruckus	rumbling	rush	rusted	rustling	rusty
+.W	same	saplings	saw	says	scales	scatter	scene	scrabble	scrawled	script	scurries	scurry
+.W	sea	season	second	sedimentary	see	seem	seems	seen	seep	select	sepulchral	seri	set	several	sewer
+.W	shakes	shallow	shaped	sharp	shin	shiny	shiver	short	should	shovel	show	shriek	shrivel	shut
+.W	sid	sight	sign	similar	simply	sinister	sitt	siz	size	skin	slants	sleep	slic	slope	sloping
+.W	smart	smell	smoke	smoky	snapp	snaps	snatch	snor
+.W	so	soft	solid	somehow	someone	something	somewhere
+.W	soon	sorts	sounds	southeast	southwest	sorry	source
+.W	spans	spare	sparkl	sparks	splash	splendid	spott		sprawl	spread	spr	spruce	spurts	squeeze
+.W	staircase	stand	star	start	startl	status
+.W	steady	steam	steel	steep	steeper	stifl	still	stone
+.W	strain	strange	strong	stumble
+.W	such	sudden	suggest	sulfur	sulk	sundry	sunset	support	surg	sway	swiss
+.W	t	tablet	taken	taking	tall	tastes	tasty	tell	temperature
+.W	than	thank	their	them	they	thick	thicker	thing
+.W	thin	think	thirty	thorough	those	though	threatening	three	threw	thrown	thru	thunder
+.W	tight	time	timber	tiny
+.W	today	too	top	torch	tortur	tough	toward
+.W	traces	trembl	tribute	trick	try
+.W	tumbl	twenty	two	twopit	twist	twisting	twisty	type
+.W	un	unafraid	unbeliev	unclimb	under	underground	understan	unexpect
+.W	unhappy	unless	unlike	unpleasant	unseen	unsure
+.W	upon	us	use	useful	usual
+.W	vain	valu	vanish	vanquish	vapor	vari	vast	vault
+.W	very	via	vic	visibility	visible	voice
+.W	wak	walls	wander	want	wants	warm	was	wash	watch	waterfall
+.W	weight	we	well	were	western	wet
+.W	what	whatever	when	whereupon	while	whirlpool	white	who	whose
+.W	wicker	wide	widen	will	wind	window	wish	wisps	within	without	witt
+.W	wolfs	wo	wooden	word	work	workmanship	worn	wrapp	worry	worth	would	wound	wr	wreckage	wrench	written
+.W	year	yellow	young	yourself
+
+LTEXT::
+$NSEQ 	= 1
+
+.SENTA	SEN.S,	1,	$YR stand $ING at the end of a road before a small brick building $DOT
+.SEN			Around you is a forest $DOT  A small stream flows out of $THE BUILD. and
+.SENTZ	SEN.S,	1,	down a gully
+.SENTA	SEN.S,	2,	You have walk $ED up a hill $COM still in $THE FORES. $DOT  $THE ROAD. slope $S back
+.SENTZ	SEN.S,	2,	down the other side of the hill $DOT  $THRIA building in the distance
+.STATM	LBUILD,	$YR inside a building $COM a well house for a large spr $ING
+.STATM	4,	$YRINA valley in $THE FORES. beside a stream tumbl $ING along a rocky bed
+.STATM	5,	$SUB $FOREST $COM with a deep valley to one side
+.STATM	6,	$SUB $FOREST near both a valley and a road
+.SENTA	SEN.S,	7,	At your feet all $THE WATER. of $THE STREA. splash $ES into a $NUM 2 $HYPHEN inch slit
+.SENTZ	SEN.S,	7,	in $THE ROCK. $DOT  Downstream the stmbed is bare rock
+.SENTA	SEN.S,	8,	$YRINA $NUM 20 $HYPHEN foot depression floor $ED with bare dirt $DOT  Set into the
+.SEN			dirt is a strong steel grate mount $ED in concrete $DOT  A dry stmbed
+.SENTZ	SEN.S,	8,	leads into the depression
+.SENTA	SEN.S,	9,	$YRINA small chamber beneath a $ASCIN C.SP '3 'x 256-'3 steel grate to $THE SURFA. $DOT
+.SENTZ	SEN.S,	9,	A low crawl over cobbles leads inward to $THE WEST.
+.SENTA	SEN.S,	10,	YOU.RE crawl $ING over cobbles in a low passage $DOT  $THRIA dim light
+.SENTZ	SEN.S,	10,	at $THE EAST. end of the passage
+.SENBA	SEN.S,	11,	$YRINA room $SUB $FILWI debris wash $ED in from $THE SURFA. $DOT
+.SEN			A $SUB $LWPSG with cobbles becom $ES plugg $ED with mud and debris
+.SEN			here $COM but an awkward canyon leads upward and west $DOT  A note on $THE WALL.
+.SENBZ	SEN.S,	11,	says $DQU 6 $UCS MAGIC $UCS WORD $UCS XYZZY
+.STATM	12,	$UR.IN an awkward sloping $SUB $EW canyon
+.SENTA	SEN.S,	13,	$YRINA splendid chamber thirty feet high $DOT  $THE WALL. $S are frozen
+.SEN			river $S of orange stone $DOT  An awkward canyon and a good passage exit
+.SENTZ	SEN.S,	13,	from east and west side $S of the chamber
+.SENTA	SEN.S,	14,	At your feet is a small pit breath $ING traces $SUB $WMIST $DOT An east
+.SENTZ	SEN.S,	14,	passage end $S here except for a small crack leading on
+.SENBA	SEN.S,	15,	$YR at one end of a vast hall STTING forwar $D out of sight to
+.SEN			$THE WEST. $DOT  $THRAR open $ING $S to either side $DOT  Nearby $COM a wide stone
+.SEN			staircase leads downward $DOT  $THE HALL. is $SUB $FILWI wisps $SUB $WMIST
+.SEN			sway $ING to and fro almost as if alive $DOT  A cold wind blow $S up the
+.SENBZ	SEN.S,	15,	staircase $DOT  $THRIA passage at the top of a dome behind you
+.STATM	16,	The crack is far too small for you to follow
+.SENTA	SEN.S,	17,	$SUB $URON $THE EAST. bank of a fissure slic $ING clear across $THE HALL. $DOT
+.SENTZ	SEN.S,	17,	$THE MIST. is quite thick here $COM and $THE FISSU. is too wide to jump
+.SENTA	SEN.S,	18,	This is a low room with a crude note on $THE WALL. $DOT  The note says $COM
+.SENTZ	SEN.S,	18,	$DQU 8 $CAP You wo $N.T get it up $THE STEPS.
+.STATM	19,	$SUB $URINT $SUB $HKING $COM with passage $S off in all direction $S
+.STATM	20,	$SUB $ATTHE the bottom of $THE PIT. with a broken neck
+.STATM	21,	You did $N.T make it
+.STATM	22,	$THE DOME. is unclimb $ABLE
+.SENTA	SEN.S,	23,	$SUB $ATTHE west end of the $SUB $TWOPI $DOT  $THRIA large hole in
+.SENTZ	SEN.S,	23,	$THE WALL. above $THE PIT. at this end of the room
+.SENTA	SEN.S,	24,	$SUB $ATTHE bottom of the eastern pit in the $SUB $TWOPI $DOT  $THRIS
+.SENTZ	SEN.S,	24,	a small pool of oil in one corner of $THE PIT.
+.SENTA	SEN.S,	25,	$SUB $ATTHE bottom of the western pit in the $SUB $TWOPI $DOT  $THRIS
+.SENTZ	SEN.S,	25,	a large hole in $THE WALL. about $NUM 25 feet above you
+.STATM	26,	You clamber up $THE PLANT. and scurry through $THE HOLE. at the top
+.STATM	27,	$SUB $URON $THE WEST. side of $THE FISSU. in $SUB $HMIST
+.SENTA	SEN.S,	28,	$YRINA low $SUB $NS passage at a hole in $THE FLOOR. $DOT  The
+.SENTZ	SEN.S,	28,	hole goes down to an $SUB $EW passage
+.STATM	29,	$SUB $URINT south side chamber
+.SENTA	SEN.S,	30,	$SUB $URINT west side chamber of the $SUB $HKING $DOT
+.SENTZ	SEN.S,	30,	A passage continue $S west and up here
+.STATM	31,	DOLLAR
+.STATM	32,	You CAN.T get by $THE SNAKE.
+.SENTA	SEN.S,	LY2,	$YR in $SUB $LROOM $COM with a passage to $THE SOUTH. $COM a passage to the
+.SEN			west $COM and a wall of broken rock to $THE EAST. $DOT  $THRIA large $DQU 2 $UCS Y2 on
+.SENTZ	SEN.S,	LY2,	a rock in the room $.S center
+.STATM	34,	$YRINA jumble of rock $COM with crack $S everywhere
+.STATM	35,	$SUB $OLOOK $THE RIGHT. $SUB $MARKS
+.SENTA	SEN.S,	36,	$YRINA dirty broken passage $DOT  To $THE EAST. is a crawl $DOT  To the
+.SENTZ	SEN.S,	36,	west is a large passage $DOT  Above you is a hole to another passage
+.SENTA	SEN.S,	37,	$SUB $URON the brink of a small clean climb $ABLE pit $DOT  A crawl leads
+.SENTZ	SEN.S,	37,	west
+.SENTA	SEN.S,	38,	$SUB $URINT bottom of a small pit with a little stream $COM which
+.SENTZ	SEN.S,	38,	enter $S and exits through tiny slit $S
+.SENTA	SEN.S,	39,	$YR in $SUB $LROOM full of dusty rock $S $DOT  $THRIA big hole in
+.SENTZ	SEN.S,	39,	$THE FLOOR. $DOT  $THRAR crack $S everywhere $COM and a passage leading east
+.SENTA	SEN.S,	40,	$SUB $UCRAW through a very $SUB $LWPSG parallel to and north
+.SENTZ	SEN.S,	40,	of $SUB $HMIST
+.SENTA	SEN.S,	41,	$SUB $ATTHE west end of $SUB $HMIST $DOT  A low wide crawl continue $s
+.SEN			west and another goes north $DOT  To $THE SOUTH. is a little passage $NUM 6 feet
+.SENTZ	SEN.S,	41,	off $THE FLOOR.
+.STATM	42,	$SUB $TWIST
+.STATM	43,	$SUB $TWIST
+.STATM	44,	$SUB $TWIST
+.STATM	45,	$SUB $TWIST
+.STATM	46,	$SUB $DEND
+.STATM	47,	$SUB $DEND
+.STATM	48,	$SUB $DEND
+.STATM	49,	$SUB $TWIST
+.STATM	50,	$SUB $TWIST
+.STATM	51,	$SUB $TWIST
+.STATM	52,	$SUB $TWIST
+.STATM	53,	$SUB $TWIST
+.STATM	54,	$SUB $DEND
+.STATM	55,	$SUB $TWIST
+.STATM	56,	$SUB $DEND
+.SENTA	SEN.S,	57,	$SUB $URON the brink of a thirty foot pit with a massive orange column
+.SEN			down one wall $DOT  You could climb down here but you could not get back
+.SENTZ	SEN.S,	57,	up $DOT  The maze continue $S at this level
+.STATM	58,	$SUB $DEND
+.SENTA	SEN.S,	59,	$SUB $UCRAW through a very $SUB $LWPSG parallel to and north
+.SENTZ	SEN.S,	59,	of $SUB $HMIST
+.SENTA	SEN.S,	60,	$SUB $ATTHE east end of a very long hall apparent $LY without side
+.SEN			chamber $S $DOT  To $THE EAST. a low wide crawl slants up $DOT  To $THE NORTH. a
+.SENTZ	SEN.S,	60,	round two foot hole slants down
+.SENTA	SEN.S,	61,	$SUB $ATTHE west end of a very long feature $LESS hall $DOT  $THE HALL.
+.SENTZ	SEN.S,	61,	joins up with a narrow $SUB $NS passage
+.STATM	62,	$YR at a crossover of a high $SUB $NS passage and a low $SUB $EW one
+.STATM	63,	$SUB $DEND
+.SENTA	SEN.S,	64,	$YR at a complex junction $DOT  A low hands and knees passage from the
+.SEN			north joins a higher crawl from $THE EAST. to make a walk $ING passage
+.SENTZ	SEN.S,	64,	go $ING west $DOT  $THRIS also $SUB $LROOM above $DOT  The air is damp here
+.SENTA	SEN.S,	65,	$YR in $CAP Bedquilt $COM a long $SUB $EW passage with holes everywhere $DOT
+.SENTZ	SEN.S,	65,	To explore at random select north $COM south $COM up $COM or down
+.SENTA	SEN.S,	66,	$YRINA room whose walls resemble $CAP Swiss cheese $DOT  Obvi $OUS passage $S
+.SEN			go west $COM east $COM northeast $COM and northwest $DOT  Part of the room is occupi $ED
+.SENTZ	SEN.S,	66,	by a large bedrock block
+.SENBA	SEN.S,	67,	$SUB $ATTHE east end of the $SUB $TWOPI $DOT  $THE FLOOR. here is
+.SEN			littered with thin rock slab $S $COM which make it easy to descen $D $THE PIT. $S $DOT
+.SEN			$THRIA path here bypass $ING $THE PIT. $S to connect passage $S from east
+.SEN			and west $DOT  $THRAR holes all over $COM but the only big one is on the
+.SENBZ	SEN.S,	67,	wall DRCTLY over $THE WEST. pit where you CAN.T get to it
+.SENBA	SEN.S,	68,	$YRINA large low circular chamber whose floor is an immense slab
+.SEN			fallen from the ceiling $PAR 1 $SUB $SLAB $DOT  East and west there once were
+.SEN			large passage $S $COM but they are now $SUB $FILWI boulders $DOT  Low small
+.SEN			passage $S go north and south $COM and $THE SOUTH. one quick $LY bends west
+.SENBZ	SEN.S,	68,	around the boulders
+.STATM	69,	$YRINA secret $SUB $NS canyon above $SUB $LROOM
+.STATM	70,	$YRINA secret $SUB $NS canyon above a siz $ABLE passage
+.SENTA	SEN.S,	71,	$YRINA $SUB $SECCY at a junction of three canyon $S $COM bear $ING
+.SEN			north $COM south $COM and southeast $DOT  $THE NORTH. one is as tall as the other
+.SENTZ	SEN.S,	71,	two combin $ED
+.SENTA	SEN.S,	72,	$YRINA large low room $DOT  Crawl $S lead north $COM southeast $COM and
+.SENTZ	SEN.S,	72,	southwest
+.STATM	73,	$SUB $DEND crawl
+.SENTA	SEN.S,	74,	$YRINA $SUB $SECCY which here run $S $SUB $EW $DOT  It cross $ES
+.SEN			over a very tight canyon $NUM 15 feet below $DOT  If you go down you may not
+.SENTZ	SEN.S,	74,	be able to get back up
+.STATM	75,	$YR at a wide place in a very tight $SUB $NS canyon
+.STATM	76,	$THE CANYO. here becom $ES too tight to go further south
+.SENTA	SEN.S,	77,	$YRINA tall $SUB $EW canyon $DOT  A low tight crawl goes $NUM 3 feet
+.SENTZ	SEN.S,	77,	north and seems to open up
+.STATM	78,	$THE CANYO. run $S into a mas $S of boulders $ASCIN C.SP '- 256-'- $SUB $DEND
+.SENTA	SEN.S,	79,	$THE STREA. flows out through a pair of $NUM 1 foot diameter sewer pip $ES $DOT
+.SENTZ	SEN.S,	79,	It would be advis $ABLE to use $THE EXIT.
+.STATM	80,	$SUB $TWIST
+.STATM	81,	$SUB $DEND
+.STATM	82,	$SUB $DEND
+.STATM	83,	$SUB $TWIST
+.STATM	84,	$SUB $TWIST
+.STATM	85,	$SUB $DEND
+.STATM	86,	$SUB $DEND
+.STATM	87,	$SUB $TWIST
+.SENTA	SEN.S,	88,	$YRINA long $COM narrow corridor STTING out of sight to the
+.SEN			west $DOT  At the eastern end is a hole through which you can see a
+.SENTZ	SEN.S,	88,	profusion of leaves
+.STATM	89,	$THRIS nothing here to climb $DOT  Use $DQU 2 $UCS UP or $DQU 2 $UCS OUT to leave $THE PIT.
+.STATM	90,	You have climb $ED up $THE PLANT. and out of $THE PIT.
+.SENTA	SEN.S,	91,	$SUB $ATTHE top of a steep incline above $SUB $LROOM $DOT  You could
+.SEN			climb down here $COM but you would not be able to climb up $DOT  $THRIA
+.SENTZ	SEN.S,	91,	passage leading back to $THE NORTH.
+.SENBA	SEN.S,	92,	$SUB $URINT $CAP Giant $CAP Room $DOT  The ceiling here is too high up for your lamp to show
+.SEN			it $DOT  Cavern $OUS passage $S lead east $COM north $COM and south $DOT  On $THE WEST. wall
+.SENBZ	SEN.S,	92,	is scrawl the inscrip $TION $COM $DQU 8 $UCS FEE $UCS FIE $UCS FOE $UCS FOO $ASCIN C.SP '[ 's 'i 'c 256-']
+.STATM	93,	the passage here is blocked by a recent cave $HYPHEN in
+.STATM	94,	$YR at one end of an immense $SUB $NS passage
+.SENTA	SEN.S,	95,	$YRINA magnificent cavern with a rush $ING stream $COM which cascad $ES
+.SEN			over a sparkl $ING waterfall into a roar $ING whirlpool which disappears
+.SENTZ	SEN.S,	95,	through a hole in $THE FLOOR. $DOT  Passage $S exit to $THE SOUTH. and west
+.SENTA	SEN.S,	96,	$SUB $URINT $SUB $SOFT $DOT  $THE WALL. $S are cover $ED with heavy curtains $COM
+.SENTZ	SEN.S,	96,	$THE FLOOR. with a thick pile carpet $DOT  Moss cover $S the ceiling
+.SENTA	SEN.S,	97,	This is the $CAP Oriental $CAP Room $DOT  Ancient oriental cave drawing $S cover the
+.SEN			walls $DOT  A gently sloping passage leads upward to $THE NORTH. $COM another
+.SENTZ	SEN.S,	97,	passage leads southeast $COM and a hands and knees crawl leads west
+.SENBA	SEN.S,	98,	$YR follow $ING a wide path around the outer edge of a large cavern $DOT
+.SEN			Far below $COM through a heavy white mist $COM strange splash $ING noise $S can be
+.SEN			heard $DOT  $THE MIST. ris $ES up through a fissure in the ceiling $DOT  The path
+.SENBZ	SEN.S,	98,	exits to $THE SOUTH. and west
+.SENTA	SEN.S,	99,	$SUB $UINAN alcove $DOT  A small northwest path seems to widen after a
+.SEN			short distance $DOT  An extremely tight tunnel leads east $DOT  It looks like
+.SENTZ	SEN.S,	99,	a very tight squeeze $DOT  An eerie light can be seen at the other end
+.SENTA	SEN.S,	100,	$UR.IN a small chamber lit by an eerie green light $DOT  An extremely
+.SENTZ	SEN.S,	100,	narrow tunnel exits to $THE WEST. $DOT  A dark corridor leads northeast
+.STATM	101,	$UR.IN the $CAP Dark $CAP Room $DOT  A corridor leading south is the only exit
+.SENTA	SEN.S,	102,	$SUB $UINAN arched hall $DOT  A coral passage once continue $D up and east
+.SENTZ	SEN.S,	102,	from here $COM but is now blocked by debris $DOT  The air smell $S of sea water
+.SENBA	SEN.S,	103,	$UR.IN $SUB $LROOM carved out of sedimentary rock $DOT  $THE FLOOR. and
+.SEN			walls are littered with bit $S of shell $S imbedd $ED in the stone $DOT  A
+.SEN			shallow passage proceed $S downward $COM and a SMWHAT steeper one leads
+.SENBZ	SEN.S,	103,	up $DOT  A low hands and knees passage enter $S from $THE SOUTH.
+.STATM	104,	$YRINA long sloping corridor with ragged sharp walls
+.STATM	105,	$YRINA $ASCIN C.SP 'c 'u 'l '- 'd 'e '- 's 'a 256-'c about eight feet across
+.SENBA	SEN.S,	106,	$SUB $UINAN anteroom leading to a large passage to $THE EAST. $DOT  Small
+.SEN			passage $S go west and up $DOT  The remnants of recent digg $ING are evident $DOT
+.SEN			A sign in midair here says $COL $DQU 14 Cave under construc $TION beyond this point $DOT
+.SENBZ	SEN.S,	106,	Proceed at own risk $DOT $PAR 7 $CAP Witt $CAP Construc $TION $CAP Company
+.STATM	107,	$YRINA maze of twisty little $SUB $DFPSG
+.STATM	108,	$YR at $SUB $WITT $DOT  Passage $S lead off in $UCS ALL direction $S
+.SENBA	SEN.S,	109,	$YRINA $SUB $NS canyon about $NUM 25 feet across $DOT  $THE FLOOR. is
+.SEN			cover $ED by white mist seep $ING in from $THE NORTH. $DOT  $THE WALL. $S extend
+.SEN			upward for well over $NUM 100 feet $DOT  Suspen $D $ED from some unseen point far
+.SEN			above you $COM an enorm $OUS two $HYPHEN sid $ED mirror is hang $ING parallel to and
+.SEN			midway between $THE CANYO. walls $DOT  $PAR 18 $THE MIRRO. is obviously provided
+.SEN			for the use of $THE DWARV. $COM who as you know $COM are extremely vain $DOT  A
+.SENBZ	SEN.S,	109,	small window can be seen in either wall $COM some $NUM 50 feet up
+.STATM	110,	$SUB $OLOOK $THE LEFT. $SUB $MARKS
+.SENBA	SEN.S,	111,	A large stalactite extend $S from the roof and almost reach $ES $THE FLOOR.
+.SEN			below $DOT  You could climb down it $COM and jump from it to $THE FLOOR. $COM but
+.SENBZ	SEN.S,	111,	having done so you would be un $ABLE to reach it to climb back up
+.STATM	112,	$YRINA little maze of twisting $SUB $DFPSG
+.SENBA	SEN.S,	113,	$SUB $ATTHE edge of a large underground reservoir $DOT  An opaque cloud
+.SEN			$SUB $WMIST fill $S the room and ris $ES rapid $LY upward $DOT  The lake is
+.SEN			fed by a stream $COM which tumbl $ES out of a hole in $THE WALL. about $NUM 10 feet
+.SEN			overhead and splash $ES noisi $LY into $THE WATER. somewhere within the
+.SENBZ	SEN.S,	113,	mist $DOT  The only passage goes back toward $THE SOUTH.
+.STATM	114,	$SUB $DEND
+.STATM	115,	$SUB $S115A $SUB $S115B
+.SENBA	SEN.S,	116,	$SUB $ATTHE southwest end of the repository $DOT  To one side is a pit
+.SEN			full of fierce green snake $S $DOT  On the other side is a row of small
+.SEN			wicker cage $S $COM each of which contains a little sulk $ING bird $DOT  In one
+.SEN			corner is a bundle of black rod $S with rusty mark $S on their end $S $DOT  A
+.SEN			large number of velvet pillow $S are scatter $ED about on $THE FLOOR. $DOT  A
+.SEN			vast mirror STTES off to the northeast $DOT  At your feet is a large
+.SEN			steel grate $COM next to which is a sign which reads $COM $DQU 7 $CAP Treasure vault $DOT
+.SENBZ	SEN.S,	116,	Keys in $SUB $OFFICE
+.SENTA	SEN.S,	117,	$SUB $URON one side of a large $COM deep chasm $DOT  A heavy white mist ris $ING
+.SEN			up from below obscur $ES all view of the far side $DOT  A southwest path
+.SENTZ	SEN.S,	117,	leads away from $THE CHASM. into a wind $ING corridor
+.SENTA	SEN.S,	118,	$YRINA long wind $ING corridor sloping out of sight in both
+.SENTZ	SEN.S,	118,	direction $S
+.STATM	119,	$SUB $SECRC
+.STATM	120,	$SUB $SECRC
+.STATM	121,	$SUB $SECRC
+.SENTA	SEN.S,	122,	$SUB $URON the far side of $THE CHASM. $DOT  A northeast path leads away
+.SENTZ	SEN.S,	122,	from $THE CHASM. on this side
+.SENTA	SEN.S,	123,	$UR.IN a long $SUB $EW corridor $DOT  A faint rumbling noise can be
+.SENTZ	SEN.S,	123,	heard in the distance
+.SENTA	SEN.S,	124,	The path fork $S here $DOT  $THE LEFT. fork leads northeast $DOT  A dull rumbling
+.SEN			seems to get louder in that direction $DOT  $THE RIGHT. fork leads southeast
+.SENTZ	SEN.S,	124,	down a gentle slope $DOT  $THE MAIN. corridor enter $S from $THE WEST.
+.SENTA	SEN.S,	125,	$THE WALL. $S are quite warm here $DOT  From $THE NORTH. can be heard a steady
+.SEN			roar $COM so loud that the entire cave seems to be trembl $ING $DOT  Another
+.SENTZ	SEN.S,	125,	passage leads south $COM and a low crawl goes east
+.STATM		126,	$SUB $S126A	$SUB $S126B	$SUB $S126C
+.SENBA	SEN.S,	127,	$YRINA small chamber $SUB $FILWI large boulders $DOT  $THE WALL. $S are
+.SEN			very warm $COM cau $S $ING the air in the room to be almost stifl $ING from the
+.SEN			heat $SUB $OEXIT a crawl hea $D $ING west $COM through which is com $ING
+.SENBZ	SEN.S,	127,	a low rumbling
+.SENTA	SEN.S,	128,	$YR walk $ING along a gently sloping $SUB $NS passage lin $ED with
+.SENTZ	SEN.S,	128,	odd $LY shaped limestone forma $TION $S
+.SENTA	SEN.S,	129,	$YR stand $ING at $THE ENTRA. to a large $COM barren room $DOT  A sign
+.SENTZ	SEN.S,	129,	posted above $THE ENTRA. reads $COL $DQU 7 Cau $TION $EXC  Bear in room $EXC
+.SENTA	SEN.S,	130,	$YR inside a barren room $DOT  The center of the room is CMPLTE $LY
+.SEN			empty except for some dust $SUB $MDUST lead away toward the
+.SENTZ	SEN.S,	130,	far end of the room $SUB $OEXIT the way you came in
+.STATM	131,	$YRINA maze of twisting little $SUB $DFPSG
+.STATM	132,	$YRINA little maze of twisty $SUB $DFPSG
+.STATM	133,	$YRINA twisting maze of little $SUB $DFPSG
+.STATM	134,	$YRINA twisting little maze of $SUB $DFPSG
+.STATM	135,	$YRINA twisty little maze of $SUB $DFPSG
+.STATM	136,	$YRINA twisty maze of little $SUB $DFPSG
+.STATM	137,	$YRINA little twisty maze of $SUB $DFPSG
+.STATM	138,	$YRINA maze of little twisting $SUB $DFPSG
+.STATM	139,	$YRINA maze of little twisty $SUB $DFPSG
+.STATM	140,	$SUB $DEND
+
+
+.IF NE C$B11M			; system area in 042600
+.ASECT
+	. = ^o42604-^o1000
+	.WORD	ASTKUP		; Start address
+
+	. = ^o42700-^o1000 	; End of system area
+.ENDC
+
+STEXT::
+$NSEQ 	= 1
+
+.STATM	1,	$UR.AT end of road again
+.STATM	2,	$UR.AT hill in road
+.STATM	LBUILD,	YOU.RE inside building
+.STATM	4,	$UR.IN valley
+.STATM	5,	$UR.IN forest
+.STATM	6,	$UR.IN forest
+.STATM	7,	$UR.AT slit in stmbed
+.STATM	8,	YOU.RE outside grate
+.STATM	9,	YOU.RE below $THE GRATE.
+.STATM	10,	$UR.IN $CAP Cobble $CAP Crawl
+.STATM	11,	$UR.IN $CAP Debris $CAP Room
+.STATN	12
+.STATM	13,	$UR.IN $CAP Bird $CAP Chamber
+.STATM	14,	$UR.AT top of $CAP Small $CAP Pit
+.STATM	15,	$UR.IN $CAP Hall of $CAP Mists
+.STATM	16
+.STATM	17,	YOU.RE on east bank of $CAP Fissure
+.STATM	18,	$UR.IN $CAP Nugget of $CAP Gold $CAP Room
+.STATM	19,	$UR.IN $CAP Hall of $ASCIN C.SP 'M 256-'t $CAP King
+.STATM	20
+.STATM	21
+.STATM	22
+.STATM	23,	$UR.AT west end of $SUB $TWOPI
+.STATM	24,	$UR.IN $CAP East $CAP Pit
+.STATM	25,	$UR.IN $CAP West $CAP Pit
+.STATN	26
+.STATN	27
+.STATN	28
+.STATN	29
+.STATM	30
+.STATM	31
+.STATM	32
+.STATM	LY2,	$UR.AT $DQU 2 $UCS Y2
+.STATM	34
+.STATM	35,	$UR.AT window on $CAP Pit
+.STATM	36,	$UR.IN $CAP Dirty $CAP Passage
+.STATM	37
+.STATM	38
+.STATM	39,	$UR.IN $CAP Dusty $CAP Rock $CAP Room
+.STATM	40
+.STATM	41,	$UR.AT west end of $CAP Hall of $CAP Mists
+.STATM	42
+.STATM	43
+.STATM	44
+.STATM	45
+.STATM	46
+.STATM	47
+.STATM	48
+.STATM	49
+.STATM	50
+.STATM	51
+.STATM	52
+.STATM	53
+.STATM	54
+.STATM	55
+.STATM	56
+.STATM	57,	$UR.AT brink of $CAP Pit
+.STATM	58
+.STATM	59
+.STATM	60,	$UR.AT east $SUB $LHALL
+.STATM	61,	$UR.AT west $SUB $LHALL
+.STATM	62
+.STATM	63
+.STATM	64,	$UR.AT $CAP Complex $CAP Junction
+.STATM	65
+.STATM	66,	$UR.IN $CAP Swiss $CAP Cheese $CAP Room
+.STATM	67,	$UR.AT east end of $SUB $TWOPI
+.STATM	68,	$UR.IN $SUB $SLAB
+.STATM	69
+.STATM	70
+.STATM	71,	$UR.AT $CAP Junction of $CAP Three $CAP Secret $CAP Canyon $S
+.STATM	72
+.STATM	73
+.STATM	74,	$UR.IN Secret $SUB $EW Canyon above tight canyon
+.STATM	75
+.STATM	76
+.STATM	77
+.STATM	78
+.STATM	79
+.STATM	80
+.STATM	81
+.STATM	82
+.STATM	83
+.STATM	84
+.STATM	85
+.STATM	86
+.STATM	87
+.STATM	88,	$UR.IN $CAP Narrow $CAP Corridor
+.STATM	89
+.STATM	90
+.STATM	91,	$UR.AT steep incline above Large Room
+.STATM	92,	$UR.IN $CAP Giant $CAP Room
+.STATM	93
+.STATM	94
+.STATM	95,	$UR.IN Cavern with $CAP Waterfall
+.STATM	96,	$UR.IN $SUB $SOFT
+.STATM	97,	$UR.IN $CAP Oriental $CAP Room
+.STATM	98,	$UR.IN $CAP Misty $CAP Cavern
+.STATM	99,	$UR.IN $CAP Alcove
+.STATM	100,	$UR.IN $CAP Plover $CAP Room
+.STATM	101,	$UR.IN $CAP Dark $CAP Room
+.STATM	102,	$UR.IN $CAP Arched $CAP Hall
+.STATM	103,	$UR.IN $CAP Shell $CAP Room
+.STATM	104
+.STATM	105
+.STATM	106,	$UR.IN $CAP Anteroom
+.STATM	107
+.STATM	108,	$UR.AT $SUB $WITT
+.STATM	109,	YOU.RE in $CAP Mirror $CAP Canyon
+.STATM	110,	$UR.AT window on $CAP Pit
+.STATM	111,	$UR.AT top of $CAP Stalactite
+.STATM	112
+.STATM	113,	$UR.AT $CAP Reservoir
+.STATM	114
+.STATM	115,	$UR.AT northeast end
+.STATM	116,	$UR.AT southwest end
+.STATM	117,	You.re on southwest side of $CAP Chasm
+.STATM	118,	$UR.IN $CAP Sloping $CAP Corridor
+.STATM	119
+.STATM	120
+.STATM	121
+.STATM	122,	YOU.RE on northeast side of $CAP Chasm
+.STATM	123,	$UR.IN $CAP Corridor
+.STATM	124,	$UR.AT $CAP Fork in $CAP Path
+.STATM	125,	$UR.AT $CAP Junction with $CAP Warm $CAP Walls
+.STATM	126,	$UR.AT $CAP Breath $HYPHEN taking $CAP View
+.STATM	127,	$UR.IN $CAP Chamber of $CAP Boulders
+.STATM	128,	$UR.IN $CAP Limestone $CAP Passage
+.STATM	129,	$UR.IN front of $SUB $BARRE
+.STATM	130,	$UR.IN $SUB $BARRE
+
+
+
+$SUBS:
+$NSEQ 	= 15
+.STATN	15,	there is
+.STATN	16,	$THRIS a
+.STATN	17,	there are
+.STATN	18,	YOU.RE at
+.STATN	19,	YOU.RE in
+.STATN	20,	You are
+.STATN	21,	$YR in a
+.STATN	22,
+
+$NSEQ 	= 1
+.STATN	$IDUND, I DON.T understan $D
+.STATN	$USCMP,	Use compas $S points or
+.STATN	$IDNKN, I DON.T know
+.STATN	$UCRAW,	You have crawl $ED
+.STATN	$GLPEA,	glisten $ING pearl
+.STATN	$WMIST,	of white mist
+.STATN	$RUTRY,	Are you try $ING to
+.SENBA	SEN.N,	$MARKS, $SUB $MDUST around the window would seem to indicate that
+.SEN			someone has been here recent $LY $DOT  DRCTLY across $THE PIT. from you and
+.SEN			$NUM 25 feet away $THRIA similar window look $ING into a light $ED room $DOT  A
+.SENBZ	SEN.N,	$MARKS,	SHADWY figure can be seen there peer $ING back at you
+.STATN	$CONGR,	$DQU 12 Congratulations on bring $ING light into the $CAP Dark $CAP Room $EXC
+.STATN	$LROOM,	a large room
+.STATN	$LTBRD,	little bird
+.STATN	$DEND, 	Dead end
+.STATN	$DFPSG,	passage $S $COM all different
+.STATN	$IRDOR, a massive $COM rusty $COM iron door
+.STATN	$CLASS,	Your score put $S you in $CAP Master $CAP ADVNER $CAP Class
+.STATN	$SWRAP,	$DOT YOU.D best start wrapp $ING this up
+.SENTA	SEN.N,	$OLOOK,	$UR.AT a low window overlook $ING a huge pit $COM which extend $S up out of
+.SEN			sight $DOT  A floor is indistinctly visible over $NUM 50 feet below $DOT  Traces $SUB $WMIST
+.SENTZ	SEN.N,	$OLOOK,	cover $THE FLOOR. of $THE PIT. $COM becom $ING thicker to
+.STATN	$MDUST,	$DOT Mark $S in the dust
+.STATN	19
+.STATN	$OEXIT,	$DOT The only exit is
+.STATN	$BEANS,	$NUM 12 $HYPHEN foot $HYPHEN tall beanstalk
+.STATN	$EW, 	east $SLA west
+.STATM	$KILL,	You kill $ED a little dwarf
+.STATN	$NS,	north $SLA south
+.STATN	$WATER,	$CAP Water $EXC $EXC
+.STATN	$FIT,	You CAN.T fit this five $HYPHEN foot
+.STATN	$FOREST, $YR in open forest
+.STATN	$ATTHE,	$YR at the
+.STATN	$TWIST,	$YRINA maze of twisty little passage $S $COM all alike
+.STATN	$URINT,	$YR in the
+.SENBA	SEN.N,	$S115B,	of oyster $S $COM a bundle of black rod $S with rusty star $S on their end $S $COM and
+.SEN			a collec $TION of brass lantern $S $DOT  Off to one side a great many dwarves
+.SEN			are sleep $ING on $THE FLOOR. $COM snor $ING loud $LY $DOT  A sign nearby reads $COL $DQU 6 $CAP Do
+.SEN			not disturb $THE DWARV. $EXC  An immense mirror is hang $ING against one
+.SEN			wall $COM and STTES to the other end of the room $COM where vari $OUS other
+.SENBZ	SEN.N,	$S115B,	sundry objects can be glimps $ED dim $LY in the distance
+.SENBA	SEN.N,	$S126A,	$SUB $URON the edge of a breath $HYPHEN taking view $DOT  Far below you is an
+.SEN			active volcano $COM from which great gouts of molten lava come surg $ING
+.SEN			out $COM cascad $ING back down into the depths $DOT  The glow $ING rock fill $S the
+.SEN			farthest reach $ES of $THE CAVER. with a blood $HYPHEN red glare $COM giv $ING everything
+.SEN			an eerie $COM macabre APPRNC $DOT  The air is $SUB $FILWI flicker $ING
+.SENBZ	SEN.N,	$S126A,	sparks of ash and a heavy smell of brimstone $DOT  $THE WALL. $S are hot to
+.SENBA	SEN.N,	$S126B, the touch $COM and the thunder $ING of $THE VOLCA. drowns out all other
+.SEN			sounds $DOT  Embedd $ED in the jagged roof far overhead are myriad twist $ED
+.SEN			forma $TION $S compos $ED of pure white alabaster $COM which scatter the murky
+.SEN			light into sinister appari $TION $S upon $THE WALL. $S $DOT  To one side is a deep
+.SENBZ	SEN.N,	$S126B,	gorge $COM $SUB $FILWI a bizarre chaos of tortur $ED rock which seems to
+.SENBA	SEN.N,	$S126C,	have been craft $ED by the devil himself $DOT  An immense river of fire
+.SEN			crash $ES out from the depths of $THE VOLCA. $COM burns its way through the
+.SEN			gorge $COM and plummets into a bottom $LESS pit far off to your left $DOT  To
+.SEN			$THE RIGHT. $COM an immense geyser of blister $ING steam erupts CONTLY
+.SEN			from a barren island in the center of a sulfur $OUS lake $COM which bubble $S
+.SEN			ominously $DOT  The far right wall is aflame with an incandescence of its
+.SEN			own $COM which lends an additional infernal SPLDOR to the already
+.SENBZ	SEN.N,	$S126C,	hellish scene $DOT  A dark $COM forebo $D $ING passage exits to $THE SOUTH.
+.SENBA	SEN.N,	$S115A,	$SUB $ATTHE northeast end of an immense room $COM even larger than the
+.SEN			giant room $DOT  It appears to be a repository for the $DQU 2 $UCS ADVENTURE
+.SEN			program $DOT  Massive torch $ES far overhead bathe the room with smoky
+.SEN			yellow light $DOT  Scatter $ED about you can be seen a pile of bottle $S $PAR 4 all
+.SENBZ	SEN.N,	$S115A,	of them empty $COM a nursery of young beanstalk $S murmuring quiet $LY $COM a bed
+.STATN	$HMISTS, the $CAP Hall of $CAP Mists
+.STATN	$HKING, $CAP Hall of the $CAP Mountain $CAP King
+.STATN	$DIM, 	Your lamp is getting dim
+.STATM	$LWPSG,	low wide passage
+.STATN	$FILWI,	fill $ED with
+.STATN	$SECRC,	$YR in a $SUB $SECCY which exits to $THE NORTH. and east
+.STATN	$GREEN,	huge green fierce
+.STATN	$SOFT,	$CAP Soft $CAP Room
+.STATN	$TWOPI,	$CAP Twopit $CAP Room
+.STATN	$SLAB,	$CAP Slab $CAP Room
+.STATN	$BOTTL,	Your bottle is
+.STATN	$BTFUL,	$SUB $BOTTL now full of
+.STATN	$BARRE,	$CAP Barren $CAP Room
+.STATN	$STRNG,	You DON.T have anything strong enough to open the
+.STATN	$PUTDN,	I advise you to put down the
+.STATN	$LHALL,	end of $CAP Long $CAP Hall
+.STATN	$UINAN,	$YR in an
+.STATN	$SPELT,	$DQU 4 $CAP Spelunker $CAP Today
+.STATN	$URON,	$YR on
+.STATN	$SECCY,	secret canyon
+.STATN	$ACHIE,	To achieve the next higher rating
+.STATN	$WITT,	$CAP Witt $.S $CAP End
+.STATN	$BACK,	back in $THE MAIN. passage
+.STATN	$HELP,	Do you need help getting out of
+.STATN	$ROD, 	A three foot black rod with a rusty star on an end lies nearby
+.STATN	$OFFICE, $CAP Main $CAP Office
+
+
+$SAYS::
+$NSEQ 	= 1
+.STATM	1,	You CAN.T carry anything more $DOT  You $.LL have to drop something first
+.EXCLA	2,	One sharp nasty knife is thrown at you
+.STATM	3,	I believe what you want is right here with you
+.EXCLA	4,	$THRIA threatening little dwarf in the room with you
+.STATM	5,	The sudden change in temperature has delicate $LY shatter $ED $THE VASE.
+.STATM	6,	It is beyond your power to do that
+.STATM	7,	YOU.RE not carrying anything
+.STATN	8,	$YR currently hold $ING the follow $ING $COL $ASCIN 256-C.NL
+.SENTA	SEN.S,	9,	IT.S not hungry $PAR 6 IT.S merely PININ. for the fjords $DOT  Beside $S $COM you
+.SENTZ	SEN.S,	9,	have no bird see $D
+.SENTA	SEN.S,	10,	A little dwarf just walk $ED around a corner $COM saw you $COM
+.SENTZ	SEN.S,	10,	threw a little axe at you which miss $ED $COM curs $ED $COM and ran away
+.STATN	11,	$COM us $ING
+.STATM	12,	$SUB $IDNKN how to app $LY that word here
+.EXCLA	13,	$SUB $IDUND that
+.QUEST	14,	I.M game $DOT  Would you care to explain how
+.SENTA	SEN.S,	15,	Sorry $COM but I am not allow $ED to give more detail $DOT
+.SENTZ	SEN.S,	15,	I will repeat the long dscrtn $TION of your loca $TION
+.STATM	16,	It is now pitch dark $DOT  If you proceed you will likely fall into a pit
+.STATM	17,	If you prefer $COM simply type $DQU 2 $UCS W rather than $DQU 2 $UCS WEST
+.STATM	18,	Please answer the question
+.STATM	19,	A little dwarf with a big knife block $S your way
+.STATM	20,	A hollow voice says $DQU 2 $UCS PLUGH
+.EXCLA	21,	One of them gets you
+.QUEST	22,	Do you really want to quit now
+.EXCLA	23,	You fell into a pit and broke every bone in your body
+.EXCLA	24,	$YR already carrying it
+.EXCLA	25,	You CAN.T be seri $OUS
+.SENTA	SEN.S,	26,	$THE BIRD. was unafraid when you enter $ED $COM
+.SENTZ	SEN.S,	26,	 but as you approach it becom $ES disturb $ED and you cannot catch it
+.STATM	27,	You can catch $THE BIRD. $COM but you cannot carry it
+.EXCLA	28,	$THRIS nothing here with a lock
+.EXCLA	29,	$YR $N.T carrying it
+.STATM	30,	The $SUB $LTBRD attack $S the green snake $COM and in an astounding flurry drive $S $THE SNAKE. away
+.EXCLA	31,	You have no keys
+.STATM	32,	It has no lock
+.STATM	33,	$SUB $IDNKN how to lock or unlock such a thing
+.STATM	34,	It was already locked
+.STATM	35,	$THE GRATE. is now locked
+.STATM	36,	$THE GRATE. is now unlock $ED
+.STATM	37,	It was already unlock $ED
+.STATM	38,	You have no source of light
+.STATM	39,	Your lamp is now on
+.STATM	40,	Your lamp is now off
+.STATM	41,	$THRIS no way to get past $THE BEAR. to unlock $THE CHAIN. $COM which is probab $LY just as well
+.STATM	42,	Nothing happens
+.QUEST	43,	Where
+.STATM	44,	$THRIS nothing here to attack
+.STATM	45,	The $SUB $LTBRD is now dead $DOT  Its body disappears
+.STATM	46,	Attack $ING $THE SNAKE. both do $ES $N.T work and is very danger $OUS
+.STATM	47,	I am unsure how $YR fac $ING $DOT  $SUB $USCMP nearby objects
+.STATM	48,	You attack a little dwarf $COM but he dodges out of the way
+.QUEST	49,	With what $QUE  Your bare hands
+.SENTA	SEN.S,	50,	$SUB $IDNKN $DQU 2 $UCS IN from $DQU 2 $UCS OUT here $DOT $SUB $USCMP name
+.SENTZ	SEN.S,	50,	something in the general direction you want to go
+.STATN	51,     I DON.T see any
+.EXCLA	52,	It miss $ES
+.EXCLA	53,	It gets you
+.STATN	54,	$ASCIN 'O 'k 256-C.NL
+.STATM	55,	You CAN.T unlock the keys
+.STATM	56,	$SUB $KILL  The body vanish $ES in a cloud of greasy black smoke
+.SENTA	SEN.S,	57,	$SUB $IDNKN where $THE CAVE. is $COM but hereabout $S no stream can run on
+.SENTZ	SEN.S,	57,	$THE SURFA. for long $DOT  I would try $THE STREA.
+.STATM	58,	I need more detailed instructions to do that
+.SENTA	SEN.S,	59,	I can only tell you what you see as you move about and manipulate
+.SENTZ	SEN.S,	59,	thing $S $DOT  I cannot tell you where remote thing $S are
+.STATM	60,	$SUB $IDNKN that word
+.QUEST	61,	What
+.STATM	62,	Use $ASCIN C.SP 'O 256-'S loader
+.STATM	63,	$THRIS nothing here with which to fill $THE VASE.
+.STATN	64,	Okay $COM
+.STATM	65,	turn $S
+
+.STATN	66,	$SUB $ACHIE $COM you need $NUM 1 more point
+$FMORE	= . - 5
+
+.STATM	67,	Blast $ING requires dynamite
+.QUEST	68,	Do you want the hint
+.STATM	69,	$THRIS no way to go that direction
+.STATM	70,	Your feet are now wet
+.STATM	71,	I think I just lost my appetite
+.EXCLA	72,	Thank you $COM it was delici $OUS
+.SENTA	SEN.S,	73,	You have taken a drink from $THE STREA. $DOT  $THE WATER. tastes strong $LY of
+.SENTZ	SEN.S,	73,	minerals but is not unpleasant $DOT  It is extremely cold
+.STATM	74,	$THE BOTTL. of water is now empty
+.SENTA	SEN.S,	75,	Rubb $ING the electric lamp is not particularly reward $ING $DOT  Anyway $COM
+.SENTZ	SEN.S,	75,	nothing excit $ING happens
+.STATM	76,	Peculiar $DOT  Nothing unexpect $ED happens
+.STATM	77,	$SUB $BOTTL empty $COM and the ground is wet
+.STATM	78,	You CAN.T pour that
+.STATM	79,	$SUB $KILL
+.QUEST	80,	Which way
+.SENTA	SEN.Q,	81,	Oh dear $COM you seem to have gotten yourself kill $ED $DOT  I might be able to
+.SEN			help you out $COM but I.VE never really done this before $DOT  Do you want me
+.SENTZ	SEN.Q,	81,	to try to reincarnate you
+.SENTA	SEN.S,	82,	All right $DOT  But DON.T blame me if something goes wr $DOT $DOT
+.SEN                    Poof $EXC $EXC
+.SEN			$YR engulf $ED in a cloud of orange smoke $DOT  Cough $ING and gasp $ING $COM
+.SENTZ	SEN.S,	82,	you emerge from the smoke and find $DOT $DOT
+.SENTA	SEN.Q,	83,	You clumsy oaf $COM YOU.VE done it again $EXC  $SUB $IDNKN how long I can
+.SENTZ	SEN.Q,	83,	keep this up $DOT  Do you want me to try reinc2 $ING you again $QUE
+.SENTA	SEN.S,	84,	Okay $COM now where did I put my orange smoke $QUE  Poof $EXC
+.SENTZ	SEN.S,	84,	Everything disappears in a dense cloud of orange smoke
+.SENTA	SEN.Q,	85,	Now YOU.VE really done it $EXC  I.M out of orange smoke $EXC  You DON.T expect
+.SENTZ	SEN.Q,	85,	me to do a decent reinc1 $TION without any orange smoke $COM do you $QUE
+.EXCLA	86,	Okay $COM if YOU.RE so smart $COM do it yourself $EXC  I.M leav $ING
+.STATN	87,	What do you want to do with the
+$FDTOT:	.STATM	88, 	$THRAR $NUM 1 threatening little dwarves in the room with you
+$FKNIV:	.EXCLA	89,	$NUM 1 of them throw knives at you
+$FSTIK:	.EXCLA	90,	$NUM 1 of them get you
+.STATM	91,	Sorry $COM but I no longer seem to remember how it was you got here
+.STATM	92,	Good try $COM but that is an old worn $HYPHEN out magic word
+
+.SENBA	SEN.S,	93,	$THE TREES. of $THE FORES. are large hardwood oak and maple $COM with an
+.SEN			occasional grove of pine or spruce $DOT  $THRIS quite a bit of under $HYPHEN
+.SEN			growth $COM large $LY birch and ash saplings plus nondescript bushes of
+.SEN			vari $OUS sorts $DOT  This time of year visibility is quite restrict $ED by
+.SEN			all the leaves $COM but travel is quite easy if you detour around the
+.SENBZ	SEN.S,	93,	spruce and berry bushes
+
+.SENTA	SEN.S,	94,	Digg $ING without a shovel is quite impractical $DOT	; On DIG
+.SENTZ	SEN.S,	94,	Even with a shovel progress is unlike $LY
+.STATM	95,	I.M as confused as you are		; On LOST
+.SENTA	SEN.S,	96,	Mist is a white vapor $COM usual $LY water $COM seen from time to time in
+.SEN			cavern $S $DOT  It can be found anywhere but is frequent $LY a sign of a deep
+.SENTZ	SEN.S,	96,	pit leading down to water
+.EXCLA	97,	Watch it
+.STATM	98,	$SUB $IDNKN the word $DQU 2 $UCS STOP $DOT  Use $DQU 2 $UCS QUIT if you want to give up
+.STATM	99,	$ASCIN 'R 'T 'F 256-'M				; On INFO, HELP
+.STATM	100,	$SUB $IDNKN how					; On SWIM
+.STATM	101,	$THE SNAKE. has now devour $ED your bird
+.STATM	102,	There $.S nothing here it wants to eat $PAR 3 except perhaps you
+.EXCLA	103,	You fool $COM dwarves eat only coal $EXC  Now YOU.VE made him REALLY mad $EXC
+.STATM	104,	You have nothing in which to carry it
+.STATM	105,	$SUB $BOTTL already full
+.STATM	106,	$THRIS nothing here with which to fill $THE BOTTL.
+.STATM	107,	$SUB $BTFUL water
+.STATM	108,	$SUB $BTFUL oil
+.STATM	109,	You CAN.T fill that
+.SENTA	SEN.S,	110,	Okay $COM from now on I $.LL only describe a place in full the first time
+.SENTZ	SEN.S,	110,	you come to it $DOT  To get the full dscrtn $TION $COM say $DQU 2 $UCS LOOK
+.STATM	111,	$THE SHELL. is very strong and is impervi $OUS to attack
+.STATM	112,	$THE PLANT. indignant $LY shakes $THE OIL. off its leaves and ask $S $COM $DQU 3 $CAP Water $QUE
+.STATM	113,	The hinges are quite thorough $LY rusted now and wo $N.T budge
+.SENTA	SEN.S,	114,	$THE OIL. has fre $ED up the hinges so that $THE DOOR. will now move $COM
+.SENTZ	SEN.S,	114,	although it requires some effort
+.STATM	115,	$THE PLANT. has xcepti $LY deep roots and cannot be pulled free
+.STATM	116,	The DWARS. knives vanish as they strike $THE WALL. $S of $THE CAVE.
+.SENTA	SEN.S,	117,	Something YOU.RE carrying wo $N.T fit through the tunnel
+.SENTZ	SEN.S,	117,	with you $DOT YOU.D best take inventory and drop something
+.STATM	118,	What $.S the matter $COM  CAN.T you read $QUE  Now YOU.D best start over
+.STATM	119,	$THE AXE. bounc $ES harm $LESS $LY off $THE DRAGO. $.S thick scales.
+.EXCLA	120,	$SUB $PUTDN clam  before open $ING it $DOT  Strain
+.EXCLA	121,	$SUB $PUTDN oyster before open $ING it $DOT Wrench
+.STATM	122,	$SUB $STRNG clam
+.STATM	123,	$SUB $STRNG oyster
+.SENTA	SEN.S,	124,	A $SUB $GLPEA fall $S out of $THE CLAM. and rolls away $DOT  Goodness $COM
+.SEN			this must really be an oyster $DOT  $PAR 10 I never was very good at identify $ING
+.SENTZ	SEN.S,	124,	bivalv $ES $DOT  Whatever it is $COM it has now snapp $ED shut again
+.SENTA	SEN.S,	125,	$THE OYSTE. creaks open $COM reveal $ING nothing but oyster inside $DOT  It
+.SENTZ	SEN.S,	125,	prompt $LY snaps shut again
+
+.SENTA	SEN.S,	126,	The $SUB $LTBRD attack $S the green dragon $COM and in an astounding flurry
+.SENTZ	SEN.S,	126,	gets burnt to a cinder $DOT  The ash $ES blow away
+
+.STATM	127,	$THRAR faint rustling noise $S from the darkness behind you
+.SENBA	SEN.S,	128,	Out from $THE SHADO. $S behind you pounc $ES a bearded pirate $EXC  $DQU 4 Har $COM har $COM
+.SEN			he chortl $ES $COM $DQU 19 I $.LL just take all this booty and hide it away with me
+.SEN			chest deep in the maze $EXC   He snatch $ES your treasure and vanish $ES into
+.SENBZ	SEN.S,	128,	the gloom
+.SENTA	SEN.S,	129,	A sepulchral voice reverberat $ING through $THE CAVE. $COM says $COM $DQU 12 $CAP Cave closing
+.SENTZ	SEN.S,	129,	soon $DOT  All ADVNER $S exit immediately through $SUB $OFFICE
+.SENTA	SEN.S,	130,	A mysteri $OUS recorded voice groan $S into life and announces
+.SENTZ	SEN.S,	130,	$DQU 10 This exit is closed $DOT  Please leave via $SUB $OFFICE
+.SENTA	SEN.S,	131,	It looks as though YOU.RE dead $DOT  Well $COM see $ING as how IT.S so close to
+.SENTZ	SEN.S,	131,	closing time anyway $COM I think we $.LL just call it a day
+.SENBA	SEN.S,	132,	The sepulchral voice enton $ES $COM $DQU 6 $CAP $THE CAVE. is now closed $DOT  As the echoes
+.SEN			fade $COM $THRIA blind $ING flash of light $PAR 7 and a small puff of orange
+.SENBZ	SEN.S,	132,	smoke  $DOT $DOT $DOT $DOT  As your ey $ES refocu $S $COM you look around and find $DOT $DOT
+.SENBA	SEN.S,	133,	$THRIA loud explosion $COM and a twenty $HYPHEN foot hole appears in the far
+.SEN			wall $COM burying $THE DWARV. in the rubble $DOT  You march through $THE HOLE.
+.SEN			and find yourself in the $SUB $OFFICE $COM where a cheer $ING ban $D of
+.SENBZ	SEN.S,	133,	friend $LY elv $ES carry the conquer $ING ADVNER off into the sunset
+.SENBA	SEN.E,	134,	$THRIA loud explosion $COM and a twenty $HYPHEN foot hole appears in the far
+.SEN			wall $COM burying $THE SNAKE. $S in the rubble $DOT  A river of molten lava pours
+.SENBZ	SEN.E,	134,	in through $THE HOLE. $COM destroy $ING everything in its path $COM includ $ING you
+.SENTA	SEN.S,	135,	$THRIA loud explosion $COM and $YR sudden $LY splash $ED across the
+.SENTZ	SEN.S,	135,	walls of the room
+.SENTA	SEN.E,	136,	The result $ING ruckus has awaken $ED $THE DWARV. $DOT  $THRAR now several
+.SEN			threatening little dwarves in the room with you $EXC
+.SENTZ	SEN.E,	136,	Most of them throw knives at you $EXC  All of them get you
+.STATM	137,	Oh $COM leave the poor unhappy bird alone
+.STATM	138,	I daresay whatever you want is around here somewhere
+.STATN	139,	You score $D
+.STATM	140,	You CAN.T get there from here
+.STATM	141,	$YR be $ING follow $ED by a very large $COM tame bear
+.STATM	142,	Gluttony is not one of $THE TROLL. $.S vic $ES $DOT  Avarice $COM however $COM is
+.QUEST	143,	Do you indeed wish to quit now
+.EXCLA	144,	You DON.T fit through a two $HYPHEN inch slit
+.EXCLA	145,	DON.T be ridicul $OUS
+.STATM	146,	I respectfully suggest you go across the bridge instea $D of jump $ING
+.STATM	147,	$THRIS no longer any way across $THE CHASM.
+.STATM	148,	It is too far up for you to reach
+.STATM	149,	$SUB $UCRAW around in some little holes and wound up $SUB $BACK
+.SENTA	SEN.S,	150,	$SUB $UCRAW around in some little holes and found your way
+.SENTZ	SEN.S,	150,	blocked by a recent cave $HYPHEN in $DOT  $YR now $SUB $BACK
+.EXCLA	151,	$SUB $FIT clam through that little passage
+.EXCLA	152,	$SUB $FIT oyster through that little passage
+.QUEST	153,	On what
+.STATM	154,	$THE TROLL. refuses to let you cross				; Original Message 160
+.STATM	155,	$THE DOOR. is extremely rusty and refuses to open
+.STATM	156,	$THRIS no way across $THE FISSU.
+.EXCLA	157,	You CAN.T go through a locked steel grate
+.SENTA	SEN.S,	158,	$THE TROLL. deftly catch $ES $THE AXE. $COM examin $ES it carefully $COM and toss $ES
+.SENTZ	SEN.S,	158,	it back $COM declar $ING $COM $DQU 9 Good workmanship $COM but IT.S not valu $ABLE enough $DOT
+.STATM	159,	$THE TROLL. catch $ES your treasure and scurries away out of sight
+.STATM	160,	$THE DRAGO. looks rather nasty $DOT  YOU.D best not try to get by
+.SENTA	SEN.S,	161,	Troll $S are close relatives with $THE ROCK. $S and have skin as tough as
+.SENTZ	SEN.S,	161,	that of a rhinocero $S $DOT  $THE TROLL. fends off your blow $S effort $LESS $LY
+.SENBA	SEN.S,	162,	Just as you reach the other side $COM the bridge buckl $ES beneath the
+.SEN			weight of $THE BEAR. $COM which was still follow $ING you around $DOT  You
+.SEN			scrabble desperate $LY for support $COM but as the bridge collap $S $ES you
+.SENBZ	SEN.S,	162,	stumble back and fall into $THE CHASM.
+.SENTA	SEN.S,	163,	$THE BEAR. lumber $S toward $THE TROLL. $COM who let $S out a startl $ED shriek and
+.SENTZ	SEN.S,	163,	scurries away $DOT  $THE BEAR. soon give $S up the pursuit and wander $S back
+.STATM	164,	$THE AXE. miss $ES and lands near $THE BEAR. where you CAN.T get at it
+.QUEST	165,	With what $QUE Your bare hands $QUE  Against $UCS HIS bear hands
+.STATM	166,	$THE BEAR. is confused $COM he only wants to be your friend
+.EXCLA	167,	For cry $ING out loud $COM the poor thing is already dead
+.SENTA	SEN.S,	168,	$THE BEAR. eager $LY wolfs down your food $COM after which he seems to calm
+.SENTZ	SEN.S,	168,	down CNSDLY and even becom $ES rather friend $LY
+.STATM	169,	$THE BEAR. is still chain $ED to $THE WALL.
+.STATM	170,	$THE chain. is still locked
+.STATM	171,	$THE chain. is now unlock $ED
+.STATM	172,	$THE chain. is now locked
+.STATM	173,	$THRIS nothing here to which $THE chain. can be locked
+.STATM	174,	$THRIS nothing here to eat
+
+$ROFF	= $NSEQ
+.EXCLA	175,	All of $CAP Adventure $ASCIN 'd 'o 256-'m give $S tribute to you $COM $CAP Adventure $CAP Grandmaster
+.STATM	176,	$SUB $CLASS $CAP A
+.STATM	177,	$SUB $CLASS $CAP B
+.STATM	178,	$SUB $CLASS $CAP C
+.STATM	179,	You have reach $ED $DQU 4 $CAP Junior $CAP Master status
+.STATM	180,	You may now consider yourself a  $DQU 5 $CAP Season $ED $CAP ADVNER
+.STATM	181,	You have achiev $D the rating $COL $DQU 5 $CAP Experienc $ED $CAP ADVNER
+.STATM	182,	Your score qualifies you as a $CAP Novice $CAP $CAP Class $CAP ADVNER
+.STATM	183,	$YR obviously a $CAP Rank $CAP Amateur $DOT  Better luck next time
+.STATM	184
+
+.SENTA	SEN.S,	185,	There $.S not much point in wander $ING around out here $COM and you CAN.T
+.SENTZ	SEN.S,	185,	explore $THE CAVE. without a lamp $DOT  So let $.S just call it a day
+.SENBA	SEN.S,	186,	$THRAR faint rustling noise $S from the darkness behind you $DOT  As you
+.SEN			turn toward them $COM the beam of your lamp fall $S across a bearded pirate $DOT
+.SEN			He is carrying a large chest $DOT $DQU 5 Shiver me timber $S $EXC he cri $ES $COM $DQU 18 I.VE
+.SEN			been spott $ED $EXC  I.D best hie meself off to the maze to hide me chest $EXC
+.SENBZ	SEN.S,	186,	With that $COM he vanish $ES into the gloom
+.STATM	187,	$SUB $DIM $DOT  YOU.D best go back for those batteries
+.STATM	188,	$SUB $DIM $DOT  I.M taking the liberty of replac $ING $THE BATTE.
+.STATM	189,	$SUB $DIM $COM and YOU.RE out of spare batteries $SUB $SWRAP
+.STATM	190,	I.M afraid $THE MAGAZ. is written in dwarvish
+.STATM	191,	This is not the maze where $THE PIRAT. leaves his treasure chest
+.SENTA	SEN.Q,	192,	Hmmm $COM this looks like a clue $COM which means it $.LL cost you $NUM 10 points
+.SENTZ	SEN.Q,	192,	to read it $DOT  Should I go ahead and read it anyway
+.SENTA	SEN.S,	193,	It says $COM $DQU 23 $CAP $THRIS something strange about this place $COM such that one
+.SENTZ	SEN.S,	193,	 of the word $S I.VE always known now has a new effect
+.STATM	194,	It says the same thing it did before
+.STATM	195,	I.M afraid $SUB $IDUND
+.STATM	196,	$SUB $CONGR
+.SENTA	SEN.S,	197,	You strike $THE MIRRO. a resoun $D $ING blow $COM whereupon it shatter $S into a
+.SENTZ	SEN.S,	197,	myriad tiny fragments
+.STATM	198,	You have taken $THE VASE. and hurled it delicate $LY to the ground.
+.SENTA	SEN.S,	199,	You prod the nearest dwarf $COM who wak $ES up grumpi $LY $COM take $S one look
+.SENTZ	SEN.S,	199,	at you $COM curs $ES $COM and grabs for his axe
+.STATM	200,	Your lamp has run out of power
+.STATM	201,	Colossal $CAP Cave is $UCS ALWAYS open $COM provided this is your $ASCIN C.SP 'P 'D 'P '- '1 256-'1
+.SENTA	SEN.S,	202,	I am prepar $ED to give you a hint $COM but it will cost you $NUM
+HPRICE::
+.SENTZ	SEN.S,	202,	1 POINTS
+.STATN	203,	If you were to quit now $COM you would score
+.STATN	204, 	out of a possible $NUM MXSCOR
+.STATM	205,	$SUB $ACHIE would be a neat trick $EXC Congratulations $EXC $EXC
+.SENTA	SEN.S,	206,	$SUB $DIM $SUB $SWRAP $COM unless
+.SEN			you can find some fresh batteries $DOT  I seem to recall there $.S a vending
+.SENTZ	SEN.S,	206,	machine in the maze $DOT  Bring some coins with you
+
+;; Hints
+.QUEST	207,	$SUB $RUTRY get into $THE CAVE.
+.SENTA	SEN.S,	208,	$THE GRATE. is very solid and has a harden $ED steel lock $DOT  You cannot
+.SEN			enter without a key $COM and $THRAR no keys nearby $DOT  I would recommend
+.SENTZ	SEN.S,	208,	look $ING elsewhere for the keys
+
+.QUEST	209,	$SUB $RUTRY catch $THE BIRD.
+.SENTA	SEN.S,	210,	$THE BIRD. is frighten $ED right now and you cannot catch it no matter what you try $DOT
+.SENTZ	SEN.S,	210,	Perhaps you might try later
+
+.QUEST	211,	$SUB $RUTRY somehow deal with $THE SNAKE.
+.SENTA	SEN.S,	212,	You CAN.T kill $THE SNAKE. $COM or drive it away $COM or avoid it $COM or anything
+.SEN			like that $DOT  $THRIA way to get by $COM but you DON.T have the necessary
+.SENTZ	SEN.S,	212,	resources right now
+
+.QUEST	213,	$SUB $HELP the maze
+.STATM	214,	You can make the passage $S look less alike by dropp $ING thing $S
+
+.STATM	215,	$SUB $RUTRY explore beyond the Plover Room
+.SENTA	SEN.S,	216,	$THRIA way to explore that region without having to worry about
+.SENTZ	SEN.S,	216,	fall $ING into a pit $DOT  None of the objects avail $ABLE is immediately useful in discover $ING the secret
+
+.QUEST	217,	$SUB $HELP here
+.STATM	218,	DON.T go west
+
+
+
+;; Objects and their properties descriptions
+$OBJECT::
+$NSEQ	= 1
+.STATN	1,	set of keys	$SEP	$THRAR some keys on the ground here
+.STATN	2,	brass lantern	$SEP	$THRIA shiny brass lamp nearby		$SEP	$THRIA lamp shin $ING nearby
+.STATN	3,	$SEP	The grate is locked			$SEP	$THE GRATE. is open
+.STATN	4,	wicker cage	$SEP	$THRIA small wicker cage discarded nearby
+.STATN	5,	black rod	$SEP	$SUB $ROD
+.STATN	6,	black rod	$SEP	$SUB $ROD
+.STATN	7,	$SEP	Rough stone steps lead down $THE PIT.	$SEP	Rough stone steps lead up $THE DOME.
+.SENTA	SEN.S,	8,	$SUB $LTBRD in cage	$SEP	A cheerful $SUB $LTBRD is sitt $ING here sing $ING
+.SENTZ	SEN.S,	8,	$SEP	$THRIA $SUB $LTBRD in $THE CAGE.
+.STATN	9,	$SEP	The way north is barred by $SUB $IRDOR	$SEP	The way north leads through $SUB $IRDOR
+.STATN	10,	velvet pillow	$SEP	A small velvet pillow lies on $THE FLOOR.
+.STATN	11,	$SEPEX	A $SUB $GREEN snake bars the way 	$SEP	$SEP
+.STATN	12,	$SEP	$SEP	A crystal bridge now spans $THE FISSU.	$SEPEX	The crystal bridge has vanish $ED
+.STATN	13,	$SEP	A massive stone tablet imbedd $ED in $THE WALL. reads $COL	$SUB $CONGR
+.STATN	14,	giant clam  grunt $EXC	$SEP	$THRIS an enorm $OUS clam here with its shell tight $LY closed
+.SENTA	SEN.S,	15,	giant oyster  groan $EXC	$SEP	$THRIS an enorm $OUS oyster here with its shell tight $LY closed
+.SENTZ	SEN.S,	15	$SEP	Interest $ING $DOT  There seems to be something written on the undsid of $THE OYSTE.
+.STATN	16,	$SUB $SPELT	$SEP	$THRAR a few recent issue $S of $SUB $SPELT magazine here
+.STATN	17
+.STATN	18
+.STATN	19	tasty food	$SEP	$THRIS food here
+.SENTA	SEN.S,	20,	small bottle	$SEP	$THRIA bottle of water here	$SEP	$THRIS an empty bottle here
+.SENTZ	SEN.S,	20,	$SEP	$THRIA bottle of oil here
+.STATN	21,	water in $THE BOTTL.
+.STATN	22,	oil in $THE BOTTL.
+.STATN	23,	$SEP
+.SENBA	SEN.S,	24,	$SEP	$THRIA tiny little plant in $THE PIT. $COM murmuring $DQU 8 $CAP Water $COM water $COM $DOT $DOT $DOT
+.SEN			$SEP	$THE PLANT. spurts into furi $OUS growth for a few second $S
+.SEN			$SEP	$THRIA $SUB $BEANS STTING up out of $THE PIT. $COM bellow $ING $DQU 2 $SUB $WATER $SUB $WATER
+.SEN			$SEP	$THE PLANT. grow $S EXPLIV $LY $COM almost fill $ING the bottom of $THE PIT.
+.SEN			$SEP	$THRIA gigantic beanstalk STTING all the way up to $THE HOLE.
+.SEN			$SEP	YOU.VE over $HYPHEN water $ED $THE PLANT. $EXC
+.SENBZ	SEN.S,	24,	IT.S shrivel $ING up $EXC  IT.S $COM IT.S $DOT $DOT
+.SENTA	SEN.S,	25,	$SEP	$SEP	The top of a $SUB $BEANS is pok $ING out of $THE WEST. pit
+.SENTZ	SEN.S,	25,	$SEP	$THRIA huge beanstalk grow $ING out of $THE WEST. pit up to $THE HOLE.
+.STATN	26,	$SEP
+.STATN	27,	$SEP	The SHADWY figure seems to be try $ING to attract your atten $TION
+.STATN	28,	dwarf $.S axe	$SEP	$THRIA little axe here	$SEP $THRIA little axe lying beside $THE BEAR.
+.STATN	29,	$S	$SEP
+.STATN	30,	$SEP
+.SENTA	SEN.S,	31,	$SEPEX	A $SUB $GREEN dragon bars the way
+.SEN			$SEP	Congratulations $EXC  You have just vanquish $ED a dragon with your bare
+.SEN			hands $EXC  $PAR 7 Unbeliev $ABLE $COM is $N.T it $QUE
+.SENTZ	SEN.S,	31,	$SEP	The body of a huge green dead dragon is lying off to one side
+.SENBA	SEN.S,	32,	$SEP	A rickety wooden bridge extend $S across $THE CHASM. $COM vanish $ING into the
+.SEN			mist $DOT  A sign posted on the bridge reads $COM $DQU 6 $CAP Stop $EXC Pay troll $EXC
+.SENBZ	SEN.S,	32,	$SEP	The wreckage of a bridge $PAR 4 and a dead bear can be seen at the bottom of $THE CHASM.
+.SENTA	SEN.S,	33,	$SEP	A bur $LY troll stand $S by the bridge and insist $S you throw him a treasure before you may cross
+.SENTZ	SEN.S,	33,	$SEP	$THE TROLL. steps out from beneath the bridge and block $S your way	$SEP
+.STATN	34,		$SEP	$THE TROLL. is nowhere to be seen
+.SENTA	SEN.S,	35,	$SEP	; bear uses rtext 141
+.SEN			$SEPEX	$THRIA feroci $OUS cave bear ey $ING you from the far end of the room
+.SEN			$SEP	$THRIA gentle cave bear sitt $ING placid $LY in one corner
+.SEN			$SEP	$THRIA contented $HYPHEN look $ING bear wandering about nearby
+.SENTZ	SEN.S,	35,	$SEP	dead
+.SENTA	SEN.S,	36,	$SEP	$THRIA message scrawled in the dust in a flowery script $COM read $ING
+.SENTZ	SEN.S,	36,	$COL	$DQU 11 This is not the maze where $THE PIRAT. leaves his treasure chest
+.STATN	37,	$SEP
+.SENTA	SEN.S,	38,	$SEP	$THRIA massive vending machine here $DOT  The instructions on it read $COL
+.SENTZ	SEN.S,	38,	$DQU 8 $CAP Drop coins here to receive fresh batteries
+.SENTA	SEN.S,	39,	batteries	$SEP	$THRAR fresh batteries here
+.SENTZ	SEN.S,	39,	$SEP	Some worn $HYPHEN out batteries have been discarded nearby
+.STATN	40,	$SEP											; CARPET
+.STATN	41,	large gold nugget	$SEPEX	$THRIA large sparkl $ING nugget of gold here
+.STATN	42,	several diamonds	$SEPEX	$THRAR diamonds here
+.STATN	43,	bars of silver	$SEPEX	$THRAR bars of silver here
+.STATN	44,	precious jewelry	$SEPEX	There is precious jewelry here
+.STATN	45,	rare coins	$SEPEX	$THRAR many coins here
+.STATN	46,	treasure chest	$SEPEX	$THE PIRAT. $.S treasure chest is here
+
+
+.SENTA	SEN.S,	47,	golden eggs	$SEPEX	$THRIA large nest here $COM full of golden eggs
+.SENTZ	SEN.S,	47,	$SEPEX	The nest of golden eggs has vanish $ED	$SEPEX	Done
+.STATN	48,	jewel $ED trident	$SEPEX	$THRIA jewel $HYPHEN encrusted trident here
+.SENTA	SEN.S,	49,	$CAP Ming vase	$SEPEX	$THRIA delicate $COM precious $COM $CAP Ming vase here
+.SEN			$SEP	$THE VASE. is now rest $ING $COM delicate $LY $COM on a velvet pillow
+.SEN			$SEP	$THE FLOOR. is littered with worth $LESS shard $S of pottery
+.SENTZ	SEN.S,	49,	$SEP	The $CAP Ming vase drop $S with a delicate crash
+.STATN	50,	egg $HYPHEN siz $ED emerald	$SEPEX	There is an emerald here the size of a plover $.S egg
+.STATN	51,	platinum pyramid	$SEPEX	$THRIA platinum pyramid here $COM $NUM 8 inch $ES on a side
+.STATN	52,	$SUB $GLPEA	$SEPEX	Off to one side lies a $SUB $GLPEA
+.SENTA	SEN.S,	53,	persian rug	$SEPEX	$THRIA persian rug spread out on $THE FLOOR.
+.SENTZ	SEN.S,	53,	$SEPEX	$THE DRAGO. is sprawl $ED out on a persian rug
+.STATN	54,	rare spice $S	$SEPEX	$THRAR rare spice $S here
+.SENTA	SEN.S,	55,	golden chain
+.SEN			$SEPEX	$THRIA golden chain lying in a heap on $THE FLOOR.
+.SEN			$SEPEX	$THE BEAR. is locked to $THE WALL. with a golden chain
+.SENTZ	SEN.S,	55,	$SEPEX	$THRIA golden chain locked to $THE WALL.
+
+
+.END

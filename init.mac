@@ -1,0 +1,386 @@
+;;; Copyright (c) 2025 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com
+;;;
+;;; SPDX-License-Identifier: MIT
+;;;
+
+.TITLE	ADVENT
+.SBTTL	Init code
+
+.INCLUDE /macros.inc/
+.INCLUDE /bkkeys.inc/
+
+.ASECT
+. = ^o63000
+
+
+
+WELCOM:	.ASCII	|Welcome to Adventure !!|<C.NL>
+	.ASCII	|Ver. 2025.0 for RT-11/BK-0010/BK-0011M, ufasoft.com/adventure|<C.NL>
+	.ASCIZ	|Would you like instructions?|
+
+INTRO:	.ASCII	|Somewhere nearby is Colossal Cave, where others have found fortunes in |
+	.ASCII	|treasure and gold, though it is rumored that some who enter are never |
+	.ASCII	|seen again.  Magic is said to work in the cave.  I will be your eyes |
+	.ASCII	|and hands.  Direct me with commands of 1 or 2 words.  I should warn |
+	.ASCII	|you that I look at only the first four letters of each word, so you'll |
+	.ASCII	|have to enter "NORTHEAST" as "NE" to distinguish it from "NORTH".|
+	.ASCII	|---|<C.NL>
+	.ASCII	|This program was originally developed by Willie Crowther in FORTRAN-10 1976.|<C.NL>
+	.ASCII	|Most of the features of the current program were added by Don Woods (DON @ SU-AI).|<C.NL>
+	.ASCII	|The program was ported to PDP-11 by Kent Blackett and Bob Supnik in 1977.|<C.NL>
+	.ASCII	|---|<C.NL>
+	.ASCII	|The program was rewritten in MACRO-11 and built for Soviet home computer BK-0010 by Sergey Pavlov in 2025.|<C.NL>
+	.ASCII	|See ufasoft.com/adventure|<C.NL>
+	.ASCIZ	|Bug reports and other correspondence should be sent to: support@ufasoft.com|<C.NL>
+.EVEN
+
+
+INIT::
+.IF NE C$RT11
+;	.SETTOP	#IMGEND
+	.TRPSET	#AREA, #I.SPK
+.IFF
+	.TTYOUT	#C.EXTM			; Switch to Extended Memory Mode
+	MOV	#I.SPK1, 10
+.ENDC
+	MOV	#I.TRAP, 34
+
+.IF NE C$1801
+	CLR	$TMLIM
+	MOV	#24, $TMCSR		; Enable Timer on max frequency with Monitoring
+.ENDC	; C$1801
+
+INIT1:
+.REM &
+	MOV	#$BUF, CURPOS
+	MOV	#STR, R1
+5$:	MOVB	(R1)+, $BUF-STR-1(R1)
+	BNE	5$
+	CALL	RDWORD
+	MOV	R2, R1
+	.P.U16
+        .EXIT
+&
+	MOVB	#C.SP, $SPBUF
+
+
+P.WELC:	.PUTS	WELCOM
+	CALL	READ$
+	MOVB	$BUF, R1
+	BIC	#^o40, R1
+	R1.NE	'Y, IDATA
+	CLRB	HINTED+1
+	.PUTS	INTRO
+
+
+;; Set up the ATLOC and LINK arrays as described above.
+;; We'll use the drop subroutine, which prefaces new objects on the lists.
+;; Since we want things in the other order, we'll run the loop backwards.
+;; If the object is in two locs, we drop it twice.
+;; This also sets up "PLACE" and "FIZED" as copies of "PLAC" and "FIXD".
+;; Also, since two-placed objects are typically best
+;; described last, we'll drop them first.
+IDATA:	MOV	#PLACE, R5
+	MOV	#OBJMAX, R4
+1$:	MOV	PLAC-PLACE(R5), (R5)+   ; Copy PLAC/FIXD to PLACE/FIXED
+	SOB	R4, 1$
+					; R5: address of ABB
+	MOV	#LOCSIZ/2, R4
+2$:	CLR	(R5)+			; Clear ABBLOC array
+	SOB	R4, 2$
+
+;	MOV	#BKRND1, ARND			;!!!T Disable randomness
+
+;; We kill 0, 1, or 2 of the 5 DWARVes.
+	TST	(R4)+			; R4: 2
+3$:	.PCT	50, 4$
+	.RND	5
+	CLRB	DLOC(R1)		; Kill random DWARF
+4$:	SOB	R4, 3$
+
+.IIF NE C$BK10	CLR	$KEY		; Clear Keyboard buffer
+	JMP	DESCR
+
+;; Init for BK0010/0011M
+INITBK:	MOV	#I.SPK1, 10
+	MOV	#I.TRAP, 34
+	CLR	$TMLIM
+	MOV	#24, $TMCSR		; Enable Timer on max frequency with Monitoring
+	MOV	#BKRND, ARND
+	CMP	100002, #254
+	BNE	BK11
+	CMPB	@#^o177717, #^o300
+	BNE	BK10			; BK-0010 Hardware
+.IF NE C$B11M
+	CALL	^o150170		; Init BOS
+
+;; Patch Syscalls
+;	MOV	#OP.NOP, PCHR.2-2
+;	MOV	#OP.EMT+63, PCHR.2-4
+;	MOV	#OP.NOP, PCHR.3-2
+BK11:	MOV	#137, $START		; JMP opcode
+	MOV	#INIT11, $START+2
+	EMT	^o37			; Reset Keyboard buffer
+	MOV	#OP.EMT+63, PCHR.2+2
+	MOV	#GTLN11, AGTLN
+	.P.CHR	C.ESC			; Clear Screen
+	.P.CHR	'E
+	.P.CHR	C.ESC
+	.P.CHR	'2			; 64-char screen mode
+	MOV	#SAVE11, ASAVE
+	MOV	#OP.EMT + 1, AEXIT
+	JMP	INIT1
+
+.ENDC	; C$B11M
+
+BK10:
+;; Patch Syscalls
+;	MOV	#OP.NOP, PCHR.2-2
+;	MOV	#OP.NOP, PCHR.2-4
+;	MOV	#OP.NOP, PCHR.3-2
+	MOV	#OP.NOP, P.CR
+	MOV	#OP.EMT+16, PCHR.2+2
+	MOV	#GTLN10, AGTLN
+	MOV	#BKSAVE, ASAVE
+	MOV	#137, AEXIT		; JMP opcode
+	MOV	#^o100300, AEXIT+2
+
+	MOV	30, PRVEMT
+	MOV	#BKINIT, $START+2
+	CALL	BKINIC
+
+;; Clear Screen
+	MOV	#^o070000, R1
+2$:	CLR	(R1)+
+	TST	R1
+	BPL	2$
+
+	JMP	INIT1
+
+
+
+.IF NE C$B11M
+INIT11:	MOV	#ABKSTR, SP
+	CALL	^o150170		; Init BOS
+	MOV	#I.SPK1, ^o10
+	MOV	#I.TRAP, ^o34
+	MOVB	#C.SP, $SPBUF
+	CLR	$TMLIM			; CF = 0
+	MOV	#^o24, $TMCSR		; Enable Timer on max frequency with Monitoring
+	.P.CHR	C.ESC
+	.P.CHR	'2			; 64-char screen mode
+	JMP	DESCR
+
+GTLN11:	.P.CHR	'>
+	.P.CHR	C.ESC
+	.P.CHR	'8		; Show cursor
+	MOV	#$BUF, R0
+	MOV	R0, CURPOS
+	MOV	#20., R1
+	EMT	^o35
+	.P.CHR	C.ESC
+	.P.CHR	'9		; Hide cursor
+	.P.CHR	C.NL
+	RETURN
+
+SAVE11:	MOV	#FNPROM, R0
+	EMT	64			; .BPRIN
+	MOV	#FILEIO+6, R0
+	MOV	#16., R1
+	EMT	^o35
+	.P.CHR	C.NL
+	MOV	#FILEIO, R0
+	EMT	115			; .BMB10
+	RETURN
+
+FILEIO:	.BYTE	0, 0			; Write command
+	.WORD	1000, IMGEND-1000
+	.BLKB	16.                     ; Filename
+	.BYTE	-1, -1			; Current Mem Map
+	.BLKB	20.
+.ENDC ; C$B11M
+
+FNPROM:	.ASCII	/Filename: /<200>	; prompt
+.EVEN
+
+;; Rebase code to address 1000
+STAR10:	MOV	#STAR10-^o1000/2, R4
+1$:	MOV	496.(R5), (R5)+
+	SOB	R4, 1$
+	JMP	@#INITBK
+
+
+.IF NE C$RT11
+GTLNRT: MOV	#$BUF, R1
+	MOV	R1, CURPOS
+ 	.GTLIN	R1, #LPROM
+;	.GTLIN	R1, #LPROM, #1
+	RETURN
+
+I.SPK:
+	PUSH	R0, R1
+	BCS	1$
+	EMT	376			; ?MON-F-Trap to 4
+	.BYTE	0, -12
+1$:	.TRPSET	#AREA, #I.SPK		; Reset Invalid-instruction handler
+	JMP 	I.SPK2
+
+RTINIT:	.TRPSET	#AREA, #I.SPK
+	MOV	#I.TRAP, 34
+	MOVB	#C.SP, $SPBUF
+	JMP	DESCR
+
+RTRND:	.GTIM	#AREA, <#$BUF+20.>	; $BUF also used for DWARF motions
+        MOV	$BUF+20.+2, R1
+        JMP	BKRND1
+
+
+
+;; Get filespec in RADIX-50
+R50FN:	MOV	R1, R3		; R3: begin of filename
+10$:	MOVB	(R1)+, R0
+	BEQ	11$
+	CMPB	R0, #'Z
+	BLO	10$
+	BICB	#^o40, -1(R1)	; To UPPERCASE
+	BR	10$
+11$:
+				; R1: end of filename
+	MOV	#$TMPFN.+13., R2	; temp buf
+	MOV	#12., R5
+	MOVB	R5, $TMPFN
+1$:	MOVB	#C.SP, -(R2)   	; init temp buf with spaces
+	SOB	R5, 1$
+
+;; Prepare filename
+	MOV	R3, R4		; R4: begin of filespec
+	MOV	#"DK, (R2)+	; default device is DK:
+    	MOVB	(R2), R0
+5$:	MOVB	R0, (R2)+
+4$:	CMP	R3, R1
+	BHIS	6$		; End of string
+	MOVB	(R3)+, R0
+	CMPB	R0, #':
+	BEQ	7$		; Copy Device name
+	CMPB	R0, #'.
+	BNE	5$
+	MOV	#$TMPFN+1+9., R2	; Jump to filename extension part
+	BR	4$
+
+7$:	MOV	#$TMPFN+1, R2	; R2: pointer to device part
+	MOV	#3, R5
+8$:	MOVB	(R4)+, R0
+	CMP	R4, R3
+	BLO	2$
+	MOVB	#C.SP, R0
+2$:	MOV	R0, (R2)+
+	SOB	R5, 8$
+	BR	4$		; R2: pointer to filename part
+
+6$:	MOV	#$TMPFN, R1
+;; INPUT: R1: Len-prefixed String
+;; RETURNS: On success CF=0, RADIX-50 string in $BUFOUT, R3 points behind the last word which is < (40. * 40.).
+;; Saves R1, R2
+A2R50:	MOVB	(R1)+, R5
+	BLE	8$		; strlen== 0 || strlen>127
+	ADD	R1, R5		; R5: end of string
+	MOV	#DEVBLK, R3
+3$:	CLR	(R3)+
+	MOV	#3, R2
+4$:	CMP	R1, R5
+	BEQ	9$		; CF=0 here (success)
+	MOV	-(R3), R0	; (R3) *= 40.
+	ASL	(R3)
+	ASL	(R3)
+	ADD	R0, (R3)
+	ASL	(R3)
+	ASL	(R3)
+	ASL	(R3)
+	MOVB	(R1)+, R0
+	CMPB	R0, #'Z
+	BHI	8$
+	CMPB	R0, #'A
+	BHIS	2$
+	SUB	#C.SP, R0
+	BEQ	5$
+	ADD	#C.SP, R0	;!!!O
+	MOV	#13., R4
+7$:	CMPB	R0, R50TAB-1(R4)
+	BNE	1$
+	MOV	R4, R0
+	ADD	#^o31 +'A, R0
+2$:	ADD	#1 - 'A, R0
+5$:	ADD	R0, (R3)+
+	SOB	R2, 4$
+	BR	3$
+1$:	SOB	R4, 7$
+8$:	SEC
+9$:	RETURN
+
+
+
+FDESC	= 5
+
+RTSAVE:	MOV	#$BUF, R1
+	.GTLIN	R1, #FNPROM
+	MOV	#$BUF, R1
+	CALL	R50FN
+	BCS	PERROR
+
+
+	MOV	#RTINIT, $USRPC
+;	MOV	#ASTKUP, $USRSP
+.REM &
+	;.FETCH	#IMGEND, #DEVBLK
+	MOV	#UPPER / 512., R5	; R5: nBlocks
+	.ENTER	#AREA, #FDESC, #DEVBLK, R5
+	BCS	PERROR
+	.WRITW	#AREA, #FDESC, #0, #UPPER/2, #0
+	BCS	PERROR
+	.CLOSE	#FDESC
+;	.EXIT
+	BCS	PERROR
+	MOV	#SSAVED , R5
+	BR	PRMSG
+&
+
+	MOV	#DEVBLK, R0
+	PUSH	<#UPPER/512>		; nBlocks
+	EMT	^o40 + FDESC		; Old API: .ENTER
+	BCS	PERROR
+	CLR	-(SP)			; Opcode for .WRITEW
+	PUSH	#UPPER/2			; nWords
+	CLR	-(SP)			; Start address
+	CLR	R0			; R0: first nBlk
+	EMT	^o220 + FDESC		; Old API: .WRITW
+	BCS	PERROR
+	EMT	^o160 + FDESC		; Old API: .CLOSE
+8$:	.PUTS	SSAVED
+	.EXIT
+	RETURN
+
+
+PERROR:	MOV	#SERROR, R5
+PRMSG:	JMP	PUTS
+
+AREA:	.WORD	0, 0, 0, 0, 0
+DEVBLK:	.RAD50	/DK FILNAMEXT/
+
+SSAVED:	.ASCIZ	/Saved/<13.><10.>
+SERROR:	.ASCIZ	/Error/<13.><10.>
+R50TAB:	.ASCII	/*-=0123456789/
+
+LPROM:	.ASCII	/>/<200>	; prompt
+.ODD
+$TMPFN:	.BLKB	20
+
+.EVEN
+
+.ENDC ; C$RT11
+
+
+
+UPPER	= <. + ^o777> & ^o177000
+IMGEND	= UPPER
+
+	.END

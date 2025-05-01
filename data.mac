@@ -1,0 +1,295 @@
+;;; Copyright (c) 2025 Ufasoft  http://ufasoft.com  mailto:support@ufasoft.com,  Sergey Pavlov  mailto:dev@ufasoft.com
+;;;
+;;; SPDX-License-Identifier: MIT
+;;;
+
+;; Variables and arrays
+
+.TITLE	ADVENT
+.SBTTL	Data
+
+.INCLUDE /macros.inc/
+
+.ASECT
+. = ^o60100
+
+
+.RADIX	10.
+
+
+.MACRO	.LINK	num, a b c d e f g h i j k l m n o p q r s t u v w x y z
+	.IIF	NE num - $NSEQ	.ERROR "$NSEQ number is inconsistent"
+	$NSEQ 	= $NSEQ + 1
+	.IRP	val, <a b c d e f g h i j k l m n o p q r s t u v w x y z>
+		.IIF NB, val	.BYTE	val
+	.ENDR
+	.BYTE	0
+.ENDM	.LINK
+
+
+D	= DOWN
+E	= EAST
+L	= LEFT
+N	= NORTH
+R	= RIGHT
+S	= SOUTH
+U	= UP
+W	= WEST
+
+
+SAY56	= 149		; You have crawled around in some little holes and wound up back in the
+SAY93	= 157		; You can't go through a locked steel grate!
+SAY95	= 144
+SAY96	= 146		; I respectfully suggest you go across the bridge instead of jumping.
+SAY97	= 156		; There is no way across the fissure
+SAY110	= 145		; Don't be ridiculous!
+SAY111	= 155		; The door is extremely rusty and refuses to open
+SAY118	= 151		; You can't fit this five-foot clam through that little passage!
+SAY119	= 152		; You can't fit this five-foot oyster through that little passage!
+SAY126	= 150		; You have crawled around in some little holes and found your way
+SAY148	= 148		; It is too far up for you to reach
+SAY153	= 153
+SAY160	= 154
+SAY161	= 147		; There is no longer any way across the chasm.
+
+
+$TRAVEL::
+$NSEQ	= 1
+
+.LINK	1,	ROAD W U 2	ENTER BUILD IN E LBUILD	DNSTR GULLY STREAM S D 4	FOREST N E 5	DEPRES 8		; End of Road
+.LINK	2,	ROAD BUILD FORWARD E N D 1		FOREST S 5								; walked up a hill, still in the forest
+.LINK	3,	ENTER EXIT OUTDOOR W 1		XYZZY 11	PLUGH LY2	DNSTR STREAM 79					; Building
+.LINK	4,	UPSTR BUILD N 1			FOREST E W U 5		DNSTR S D 7		DEPRES 8			; Valley
+.LINK	5,	VALLEY E D 4	 	FOREST FORWARD N $PROB 50 5 6		W S 5						; Forest
+.LINK	6,	ROAD N 1		VALLEY E W D 4			FOREST S 5						; Forest
+.LINK	7,	BUILD 1		UPSTR N 4		FOREST E W 5		DNSTR ROCK BED S 8		SLIT STREAM D SAY95	; Slit in Streambed
+.LINK	8,	FOREST E W S 5			BUILD 1			UPSTR GULLY N 7		 ENTER VALLEY D $PRN0 GRATE 9 SAY93	; Outside Grate
+.LINK	9,	EXIT U $PRN0 GRATE 8 SAY93	CRAWL COBBL IN W 10	PIT 14	DEBRIS 11					; Below the Grate
+.LINK	10,	EXIT SURFAC NULL E 9	IN DARK W DEBRIS 11	PIT 14								; Cobble Crawl
+.LINK	11,	DEPRES $PRN0 GRATE 8	ENTRNC 9	CRAWL COBBL  PSG LOW E 10	CANYON IN U W 12	XYZZY LBUILD	PIT 14	; Debris room
+.LINK	12,	DEPRES $PRN0 GRATE 8	ENTRNC 9	D E DEBRIS 11	IN U W 13	PIT 14					; Awkward Sloping East/West Canyon
+.LINK	13,	DEPRES $PRN0 GRATE 8	ENTRNC 9	DEBRIS 11	CANYON E 12	PSG PIT W 14			 	; Bird Chamber
+.LINK	14,	DEPRES $PRN0 GRATE 8	ENTRNC 9	DEBRIS 11	PSG E 13	D PIT VSTEPS $CARRY NUGGET 20 15	CRACK W 16	; Top of Small Pit
+.LINK	15,	L S 18		FORWARD HALL W 17	STAIR D N 19	U PIT	VSTEPS DOME PSG E $CARRY NUGGET 22 14	Y2 34	; Hall of Mists
+.LINK	16,	14														; The crack is far too small for you to follow
+;; East Bank of Fissure
+.LINK	17,	HALL E 15	JUMP $PRN0 FISSURE SAY96	FORWARD	$PRN1 FISSURE 21	OVER ACROSS W CROSS $PRN1 FISSURE SAY97 27
+.LINK	18,	HALL EXIT N 15													; Nugget of Gold Room
+
+;; Hall of Mt King
+	.BYTE	STAIR, U, E, 15,	N, L, $PRN0, SNAKE,	28
+.LINK	19,	S R $PRN0 SNAKE 29	W FORWARD $PRN0 SNAKE 30	N 32	SW $PROB 35 74 $HERE SNAKE 32 74	SECRE 74
+
+.LINK	20															; Bottom of the pit with a broken neck
+.LINK	21															; You didn't make it
+.LINK	22,	15														; Dome is unclimbable
+.LINK	23,	E ACROSS 67	W SLAB 68	D PIT 25	HOLE SAY148							; West end of the Twopit Room
+.LINK	24,	U EXIT 67													; East Pit
+.LINK	25,	U EXIT 23	CLIMB  $PRN4 PLANT 31 26									; Bottom of the western pit in the Twopit Room
+.LINK	26, 	88														; You clamber up the plant
+;; West Side of the Fissure
+.LINK	27,	JUMP $PRN0 FISSURE SAY96	FORWARD $PRN1 FISSURE 21	OVER ACROSS E CROSS $PRN1 FISSURE SAY97  17	N 40	W 41
+.LINK	28,	HALL EXIT S 19 		N Y2 LY2			D HOLE 36							; Low north/south passage
+.LINK	29,	HALL EXIT N 19													; South side chamber
+.LINK	30,	HALL EXIT E 19		W U 62											; W Chamber of the Hall of Mt King
+.LINK	31,	$PRN2 PLANT 89 90
+.LINK	32,	19														; Can't get by the snake
+.LINK	LY2,	PLUGH LBUILD		S 28	E WALL BROKEN 34	W 35		PLOVE $CARRY EMRALD $CALL2 100			; Y2
+.LINK	34,	D Y2 LY2			U 15								  			; Jumble of Rock
+.LINK	35,	E Y2 LY2			JUMP 20											; Low window overlooking a huge pit
+.LINK	36,	E CRAWL 37		U HOLE 28		W 39		BEDQU 65					; Dirty broken passage
+.LINK	37,	W CRAWL 36		D PIT CLIMB 38										; Brink of a small clean climbable pit
+.LINK	38,	CLIMB U EXIT 37		SLIT STREAM D UPSTR DNSTR SAY95						 		; Small Pit
+.LINK	39,	E PSG 36	D HOLE FLOOR 64			BEDQU 65							; Dusty Rock Room
+.LINK	40,	41														; Passage parallel to the Hall of Mists.
+.LINK	41,	S U PSG CLIMB 42		E 27		N 59		W CRAWL 60		 			; West End of Hall of Mists
+.LINK	42,	U 41		N 42		E 43		S 45		W 80					 	; Alike passages
+.LINK	43,	W 42,		S 44		E 45									 	; Alike passages
+.LINK	44,			E 43		D 48		S 50		N 82					 	; Alike passages
+.LINK	45,	W 42		N 43		E 46		S 47		U D 87						; Alike passages
+.LINK	46,	W EXIT 45													; Dead End
+.LINK	47,	E EXIT 45													; Dead End
+.LINK	48,	U EXIT 44													; Dead End
+.LINK	49,			E 50		W 51							 			; Alike passages
+.LINK	50,	E 44	W 49			D 51		S 52							 	; Alike passages
+.LINK	51,		W 49	U 50				E 52		S 53					 	; Alike passages
+.LINK	52,			W 50		E 51		S 52		U 53		N 55	D 86 			; Alike passages
+.LINK	53,	W 51		N 52		S 54					 					; Alike passages
+.LINK	54,	W EXIT 53													; Dead End
+.LINK	55,	W 52		N 55	D 56	E 57									 	; Alike passages
+.LINK	56,	U EXIT 55													; Dead End
+.LINK	57,	D CLIMB 13	W 55	S 58	N 83		E 84								; Brink of Pit with Orange Column
+.LINK	58,	E EXIT 57													; Dead End
+.LINK	59,	27														; Passage parallel to the Hall of Mists.
+.LINK	60,	E U CRAWL 41	W 61	N D HOLE 62									   	; East End of Long Hall
+.LINK	61,	E 60		N 62	S $UCND 107										; West End of Long Hall
+.LINK	62,	W 60		N 63	E 30	S 61										; Crossover of a high N/S passage and a low E/W
+.LINK	63,	S EXIT 62													; Dead end
+.LINK	64,	U CLIMB ROOM 39		W BEDQU 65	N SHELL 103	E 106							; Complex junction
+
+;; Bedquilt
+	.BYTE	E, 64,	W, 66,	S, $PROB, 80, SAY56, 68
+.LINK	65,	SLAB 68		U $PROB 80 SAY56 $PROB 50 70 39	N $PROB 60 SAY56 $PROB 75 72 71	D $PROB 80 SAY56 106
+
+.LINK	66,	NE 65	W 67	S $PROB 80 SAY56	CANYON 77	E 96	NW $PROB 50 SAY56 97 	ORIENT 97		; Swiss Cheese Room
+.LINK	67,	E 66		W ACROSS 23	D PIT 24									; East End of Twopit Room
+.LINK	68,	S 23		U CLIMB 69	N 65										; Large low circular chamber
+.LINK	69,	D SLAB 68	S $PRN0 DRAGON 120 119		N 109		RESERV 113					; Secret north/south canyon above a large room
+.LINK	70,	N 71		D PSG 65	S 111										; Secret north/south canyon above a sizable passage
+.LINK	71,	SE 65		S 70	N 110											; Junction of Three Secret Canyons
+.LINK	72,	BEDQU 65	SW 118	N 73	SE ORIENT 97								 	; Large Low Room
+.LINK	73,	S CRAWL EXIT 72													; Dead end crawl
+.LINK	74,	E 19	W $PRN0 DRAGON 120 121		D 75									; Secret canyon which here runs east/west
+.LINK	75,	S 76	N 77											 		; Tight North/South Canyon
+.LINK	76,	N 75														; Canyon here becomes too tight to go further south
+.LINK	77,	E 75	W 78 N CRAWL 66									   			; Tall East/West Canyon
+.LINK	78,	S 77														; Dead End
+.LINK	79,	LBUILD														; Stream flows out through a pair of 1 foot diameter sewer pipes
+.LINK	80,	N 42	W 80	S 80	E 81											; Passages, all alike
+.LINK	81,	W EXIT 80													; Dead end
+.LINK	82,	S EXIT 44													; Dead end
+.LINK	83,	S 57	E 84	W 85												; Passages, all alike
+.LINK	84,	N 57	W 83	NW 114												; Passages, all alike
+.LINK	85,	E EXIT 83													; Dead end
+.LINK	86,	U EXIT 52													; Dead end
+.LINK	87,	U D 45														; Passages, all alike
+.LINK	88,	D CLIMB E 25	JUMP 20		W GIANT 92			                                                ; Long, narrow corridor
+.LINK	89,	25														; Nothing here to climb
+.LINK	90,	23														; Climbed up the plant and out of the pit
+.LINK	91,	N CAVERN PSG 95		D CLIMB 72										; Top of a steep incline above a large room
+.LINK	92,	S 88	E 93	N 94												; Giant Room
+.LINK	93,	S GIANT EXIT 92													; The passage here is blocked by a recent cave-in
+.LINK	94,	S GIANT PSG 92	N ENTER CAVERN $PRN0 DOOR 95 SAY111								; One end of an immense north/south passage
+.LINK	95,	S EXIT 94	GIANT 92	W 91										; Magnificent cavern
+.LINK	96,	W EXIT 66													; Soft Room
+.LINK	97,	SE 66		W CRAWL 72	U N CAVERN 98								  	; Oriental Room
+.LINK	98,	S ORIENT 97	W 99												; Misty Cavern
+.LINK	99,	NW CAVERN 98	E PSG $CALL1 100							 			; Alcove
+.LINK	100,	W PSG EXIT $CALL1 99	PLOVE $CARRY EMRALD $CALL2 LY2	NE DARK 101						; Plover Room
+.LINK	101,	S PLOVE EXIT 100						 						; Dark Room
+.LINK	102,	D SHELL EXIT 103												; Arched hall
+.LINK	103,	U HALL 102	D 104	S $CARRY CLAM SAY118 $CARRY OYSTER SAY119 64			 			; Shell Room
+.LINK	104,	U SHELL 103	D 105												; Long Sloping Corridor
+.LINK	105,	U EXIT 104	SHELL 103											; Cul-de-sac
+.LINK	106,	U 64	W 65	E 108												; Anteroom
+.LINK	107,	S 131	SW 132	NE 133	SE 134	U 135	NW 136	E 137	W 138	N 139	D 61					; Diff passages
+.LINK	108,	E N S NE SE NW U D $PROB 95 SAY56 106		W SAY126							; Witt's End
+.LINK	109,	S 69		N RESERV 113											; North/south canyon
+.LINK	110,	W 71		JUMP 20												; Window on Pit
+.LINK	111,	N 70	D JUMP CLIMB $PROB 40 50 $PROB 50 53 45								; A large stalactite extends from the roof
+.LINK	112,	SW 131	N 132	E 133 NW 134	SE 135	NE 136	W 137	D 138	U 139	S 140					; Diff passages
+.LINK	113,	S EXIT 109													; Edge of a large underground reservoir
+.LINK	114,	SE 84														; Pirate's den
+.LINK	115,	SW 116														; Northeast End
+.LINK	116,	NE 115		D SAY93												; Southwest end
+;; Southwest side of Chasm
+.LINK	117,	SW 118	OVER ACROSS CROSS NE $HERE TROLL SAY160 $PRN0 CHASM SAY161 $CALL3	JUMP $PRN0 CHASM 21 SAY96
+.LINK	118,	D 72		U 117												; Sloping Corridor
+.LINK	119,	N EXIT 69	E FORWARD SAY153										; Secret canyon which exits to the north and east
+.LINK	120,	N 69		E 74												; Secret canyon which exits to the north and east
+.LINK	121,	E EXIT 74	N FORWARD SAY153										; Secret canyon which exits to the north and east
+.LINK	122,	NE 123	OVER ACROSS CROSS SW $HERE TROLL SAY160 $CALL3	JUMP SAY96  FORK 124	VIEW 126	BARREN 129	; Northeast side of Chasm
+.LINK	123,	W 122		E FORK 124							VIEW 126	BARREN 129	; Corridor
+.LINK	124,	W 123		NE L 125	SE R D 128					VIEW 126	BARREN 129	; The path forks here
+.LINK	125,			S FORK 124							N VIEW 126	E CRAWL 127	; Junction with Warm Walls
+.LINK	126,	S PSG EXIT 125	FORK 124	D JUMP SAY110									; Breath-taking View
+.LINK	127,			FORK 124							VIEW 126			; Small chamber filled with large boulders
+.LINK	128,			N U FORK 124	S D BARREN 129					VIEW 126			; Limestone Passage
+.LINK	129,	W U 128		FORK 124	E IN BARREN ENTER 130				VIEW 126			; Front of Barren Room
+.LINK	130,	W EXIT 129	FORK 124							VIEW 126			; Barren Room
+.LINK	131,	W  107	SE 132	NW 133	SW  134	NE 135	U  136	D  137	N  138	S  139	E  112					; Diff passages
+.LINK	132,	NW 107	U  131	N  133	S  134	W  135	SW 136	NE 137	E  138	D  139	SE 112					; Diff passages
+.LINK	133,	U  107	D  131	W  132	NE 134	SW 135	E  136	N  137	NW 138	SE 139	S  112					; Diff passages
+.LINK	134,	NE 107	N  131	NW 132	SE 133	E  135	D  136	S  137	U  138	W  139	SW 112					; Diff passages
+.LINK	135,	N  107	SE 131	D  132	S  133	E  134	W  136	SW 137	NE 138	NW 139	U  112					; Diff passages
+.LINK	136,	E  107	W  131	U  132	SW 133	D  134	S  135	NW 137	SE 138	NE 139	W  112					; Diff passages
+.LINK	137,	SE 107	NE 131	S  132	D  133	U  134	NW 135	N  136	SW 138	E  139	W  112					; Diff passages
+.LINK	138,	D  107	E  131	NE 132	U  133	W  134	N  135	S  136	SE 137	SW 139	NW 112					; Diff passages
+.LINK	139,	SW 107	NW 131	E  132	W  133	N  134	D  135	SE 136	U  137	S  138	NE 112					; Diff passages
+.LINK	140,	N EXIT 112  													; Dead End; Vending machine
+
+
+
+
+
+.EVEN
+
+
+B.BVAR:
+
+
+
+WZDARK:	.WORD	0	; Says whether the loc he's leaving was dark
+
+
+
+
+TALLY:	.BYTE	15	; Keeps track of how many are not yet found, so we know when to close the cave
+
+
+
+EOS:	.BYTE	1		; End of Sentence
+EOW:	.BYTE	0		; End of Word
+UCASE:	.BYTE	0		; Print entire word in UPPERCASE
+
+
+;; Dwarves locations
+ODLOC:	.BYTE	0, 0, 0, 0, 0, 0		; Prior loc of each DWARF, initially garbage
+
+;; Must be adjacent
+DLOC:	.BYTE	19, 27, LY2, 44, 64
+	.BYTE	CHLOC				; Pirate
+DSEEN:	.BYTE	0, 0, 0, 0, 0, 0		; Flag if dwarf has seen him
+
+
+
+HTURNS:	.BYTE	4, 5, 8, 75, 25, 20		; Const. The number of turns he must be at the right loc(s) before triggering the hint
+HINTLC:	.BYTE	4, 5, 8, 75, 25, 20		; The number of turns remained until Hint
+
+;;--- Must be adjacent, used in RSCORE
+;; Controls the level of activation of all this:
+;;   0	No DWARF stuff yet (wait until reaches Hall of Mists)
+;;   1	Reached Hall of Mists, but hasn't met first dwarf
+;;   2	Met first DWARF, others start moving, no KNIVES thrown yet
+;   3	A KNIFE has been thrown (first set always misses)
+;;   3+	DWARVEWS are mad (increases their accuracy)
+.EVEN
+DFLAG:	.BYTE	0
+BSCORE:	.BYTE	0
+HINTED:	.BYTE	10, 5, 2, 2, 2, 4, 5, 3		; HINTED+i is 0 iff hint i has been used
+						; The points deducted for taking the hint
+CLOSNG:	.BYTE	-25				; Says whether its closing time yet. 0 means `True`
+CLOSED:	.BYTE	-10				; Says whether we're all the way closed. 0 means `True`
+GAVEUP:	.BYTE	-4				; Says whether he exited via "quit"
+BONUS:	.BYTE	0
+SCORE:	.BYTE	38				; Init value to calculate score
+	.BYTE	0
+;;--- NUMTRS(15) adjacent bytes (DFLAG does not count)
+
+.EVEN
+
+
+O.WZDA	= WZDARK - B.BVAR
+O.CLOD	= CLOSED - B.BVAR
+O.CLIN	= CLOSNG - B.BVAR
+O.HIN2	= HINTED + 1 - B.BVAR
+
+.EVEN
+PLACE	= .
+FIXED	= PLACE + OBJMAX
+ABB	= FIXED + OBJMAX			; 140. bytes
+;!!!? ABBLOC	= ABB + LOCSIZ				; 140. bytes
+
+O.TALL	= TALLY - B.BVAR
+O.UCAS	= UCASE - B.BVAR
+O.EOS	= EOS - B.BVAR
+O.EOW	= EOW - B.BVAR
+
+O.MSG	= PLACE - B.OBJ - 1 + MESSAGE - B.BVAR
+O.CHEST	= PLACE - B.OBJ - 1 + CHEST - B.BVAR
+O.BATT	= PLACE - B.OBJ - 1 + BATTER - B.BVAR
+O.TROL	= PLACE - B.OBJ - 1 + TROLL - B.BVAR
+O.EGGS	= PLACE - B.OBJ - 1 + EGGS - B.BVAR
+
+
+.END
