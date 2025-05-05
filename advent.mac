@@ -250,15 +250,16 @@ L77$:	MOVB	ATTACK, R0
 	INCB	DFLAG
 L81:	SOB	R0, L89
 	.RSPEAK	2			; One sharp nasty knife is thrown at you!
-	MOV	#52, R1
+	MOV	#52, R1			; It misses!
 L82:	MOVB	STICK, R2
 	MOVB	R2, $FSTIK + 2
 	R2.HI	1, L83
-	ADD	R2, R1
+	ADD	R2, R1			; If R2==1 Print "It gets you!"
 	.RSPEAK
-	TSTB	R4
+	TSTB	R2
 L84:	BNE	DEAD.1
 	BR	DESCR
+
 
 
 

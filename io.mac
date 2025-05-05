@@ -44,7 +44,8 @@ P.DQU:	.P.CHR	C.SP
 	.P.CHR	'"
 	PUSH	#'"
 P.DQU1:	CLRB	EOW
-	CLRB	EOP
+	CLRB	(PC)+
+EOP:	.WORD	0		; End of phrase
 	MOVB	(R5)+, R3
 1$:	PUSH	R3
 	CALL	UPWORD
@@ -120,15 +121,13 @@ PSPEC1:
 
 
 CAPIT:	INCB	EOS			; Capitalize
-PWORD1: TSTB	(PC)+
-EOP:	.WORD	0			; End of phrase
+PWORD1:	ASRB	EOP
+	BCC	1$
+	.P.CHR	C.SP
+1$:	TSTB	EOW
 	BEQ	2$
 	.P.CHR	C.SP
-2$:	CLRB	EOP
-	TSTB	EOW
-	BEQ	1$
-	.P.CHR	C.SP
-1$:	DECB	EOW
+2$:	;!!!R	DECB	EOW
 PWORD3:	IF.NE	O.UCAS, 9$
 	TSTB	EOS
 	BEQ	10$
@@ -214,8 +213,7 @@ PWORD:	SUB	#11., R2
 	.P.CHR
 	CMPB	R1, #'.
 	BNE	3$
-	INCB	EOP
-	;!!!R .P.CHR	C.SP
+	MOVB	#1, EOP
 3$:	CMPB	R2, #-5
 	BCC	5$
 	CLRB	EOW
