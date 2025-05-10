@@ -286,19 +286,7 @@ JDESC2:	BR	DESCR		;!!!O
 
 
 
-;; Can't leave Cave once it's closing (except by Main Office)
-;; R1: NEWLOC
-REPL2:	R1.HI	8, 71$
-	TST	R1
-	BEQ	71$
-	IF.NE	O.CLIN, 71$
-	MOV	LOC, R1
-	CALL	SPANIC
-;; See if a Dwarf has seen him and has come from where he wants to go.
-;; If so, the Dwarf's blocking his way. If coming from place forbidden to Pirate
-;; (Dwarves rooted in place) let him get out (and attacked).
-71$:	CALL	IFFORB
-	BCS	L74
+REPL3:	BCS	L74
 	CMP	R1, R2		; R1: NEWLOC, R2: LOC
 	BEQ	L74
 	MOV	#5, R3
@@ -426,7 +414,6 @@ L2008:	MOV	R5, R2
 	BR	DESC.2
 
 
-
 FALLPT:	.RSPEAK	23			; You fell into a pit and broke every bone in your body!
 DEAD:	MOV	#LOC, R5		; R5: #LOC
 	MOV	(R5), (PC)+	;84	OLDLC2=LOC
@@ -446,7 +433,7 @@ DEAD1:	ADD	#2, NUMDIE	;99
 ;; etc.  the last time, if he wants another chance, he gets a snide remark as
 ;; we exit.  when reincarnated, all objects being carried get dropped at OLDLC2
 ;; (presumably the last place prior to being killed) without change of PROPS.
-;; the loop runs backwards to assure that the bird is dropped before the cage.
+;; the loop runs backwards to assure that the BIRD is dropped before the CAGE.
 ;; (This kluge could be changed once we're sure all references to bird and cage are done by keywords.)
 ;; The lamp is a special case (it wouldn't do to leave it in the cave).
 ;; It is turned off and left outside the building (only if he was carrying it, of course).
@@ -478,18 +465,6 @@ L5105:	ADD	#ENTRNC-DEPRES, (R2)	; OBJ=ENTRNC
 L5104:	ADD	#DEPRES-GRATE, (R2)	; OBJ=DEPRES
 MOTIO1:	JMP	MOTION		;!!!o
 
-
-
-;; LAMP ON
-.ON.:	N.HERP	LAMP, 38	; You have no source of light
-	TST	(PC)+
-LIMIT:	.WORD	330		; Limit	lifetime of lamp
-	BLT	P184
-	.SPROP	LAMP, 1
-	.RSPEAK	39		; Your lamp is now on
-	.WZDARK	DESCR2
-	RETURN
-P184:	.RSPKR	200		; Your lamp has run out of power
 
 
 
@@ -544,7 +519,7 @@ L5000:	MOV	#OBJ, R2
 	MOV	#ROD2, (R2)
 	BR	ANAOBJ
 5141$:	MOV	#PLANT2, (R2)
-ANAOBJ:	WD2.EQ	0, ANAOB4	;5010
+ANAOBJ:	WD2.EQ	0, ANAOB2	;5010
 ;; Get second word for analysis.
 L2800:	MOV	(PC)+, R1
 WD2:	.WORD	0
@@ -568,12 +543,13 @@ VERB:	.WORD	0
 
 
 
-ANAOB4:	JMP	ANAOB2		;!!!o
+
+
 
 ;; Analyse a verb. Remember what it was, go back for object if second word
 ;; unless verb is "SAY", which snarfs arbitrary second word.
 L4000:	MOV	R1, VERB
-	WD2.EQ	0, ANAOB4
+	WD2.EQ	0, ANAOB2
 	V.NE	SAY, L2800
 ;; Echo WD (or WD1 if no WD2 (say what?, etc.).)  magic words override.
 .SAY.:	MOV	WD2, R1
@@ -602,6 +578,13 @@ L3000:	.PCTP	20, 13		; I don't understand that!
 	.PCTP	20, 61		; What?
 	.RSPKR	60		; I don't know that word.
 
+ANAOB2:	MOV	VERB, R1
+	BEQ	ANAOB3
+	R1.HI	FEE-1, .FEE.
+	ASL	R1
+	CLR	R0
+	MOV	OBJ, R5			; ZF processed by actions
+	JMP	@ACTION-2(R1)
 
 
 DARKNESS:
@@ -609,13 +592,10 @@ DARKNESS:
 	WD2.NE	0, 5199$
 	V.EQ	FIND, ANAOBJ
 	V.EQ	INVENT, ANAOBJ
-
 5199$:	.RSPEAK	51		; I don''t see any
 	BR	P.INP2
 
-DNTUND:	.RSPEAK	13		; I don't understand
-	.PUTS	$SPBUF		; to print space
-	BR	REPL1
+
 
 
 ;; Magazines in dwarvish, message we've seen, and . . . OYSTER?
@@ -645,6 +625,63 @@ DNTUND:	.RSPEAK	13		; I don't understand
 	O.EQ.P	TABLET, 196		; "Congratulations on bringing light into the Dark Room!"
 	O.EQ.P	MESSAGE, 191		; "This is not the maze where the pirate leaves his treasure chest."
 	.RSPKR	195			; I'm afraid I don't understand
+
+.NOTH.:.RSPKR	42			; Nothing happens
+
+;; FEE FIE FOE FOO (AND FUM). Advance to next state if given in proper order.
+;; Look up WD1 in section 3 of vocab to determine which word we've got.
+;; Last word zips the EGGS back to the Giant Room (unless already there).
+.FEE.:  O.NE.P	0, 9			; I don't know how
+	SUB	#FEE, R1
+	MOV	#FOOBAR, R5
+	CMP	(R5), R1
+	BEQ	1$
+	TST	(R5)
+	BEQ	.NOTH.
+	.RSPKR	118			; What's the matter, can't you read?  Now you'd best start over
+1$:	COM	(R5)			; FOOBAR = -(R1+1)
+	R1.NEP	3, 54			; Ok
+	CLR	(R5)			; FOOBAR = 0
+	CMPB	#92, PLACE-1-B.OBJ + EGGS		; #92
+	BEQ	.NOTH.
+	N.TOT	EGGS, 8256$
+	L.EQ	92, NOTHING	; EGGS
+8256$:	IF.NE	O.EGGS, 8253$
+	IF.NE	O.TROL, 8253$
+	N.PRP0	TROLL, 8253$
+	.SPROP	TROLL, 1	; Bring back TROLL if we steal the EGGS back from him before crossing
+8253$:	.MOVE	EGGS, 92
+	L.EQ	92, 8255$
+	;!!!O
+	N.HERE	EGGS, 8257$
+	.PSPEAK	EGGS, 1
+	RETURN
+8257$:	.PSPEAK	EGGS, 2
+	RETURN
+8255$:	.PSPEAK	EGGS, 0
+NOTHING:
+REPL.F:	RETURN
+
+;; LAMP OFF
+.OFF.::	N.HERP	LAMP, 38	; You have no source of light
+	.SPROP	LAMP, 0
+	.RSPEAK	40		; Your lamp is now off
+	.DARK
+	BPL	REPL.F
+	.RSPKR	16		; It is now pitch dark.  If you proceed you will likely fall into a pit
+
+
+DNTUND:	.RSPEAK	13		; I don't understand
+	.PUTS	$SPBUF		; to print space
+	BR	REPL1
+
+
+ANAOB3:	.RSPEAK	87		; What do you want to do with the OBJ?
+	MOV	INP2, R5
+	MOVB	#'?, (R5)+
+	CLRB	(R5)+
+	.PUTS	$SPBUF    	; to print space
+	BR	CKHIN0
 
 ;40900:
 ASKHINT:MOV	R5, R1		;40010
@@ -696,7 +733,6 @@ HBIRD:	SOB	R4, HSNAKE
 	N.TOT	ROD, L40030
 	O.EQ	BIRD, ASKHINT
 	BR	L40030
-
 
 
 REPL:	CLR	VERB
@@ -761,59 +797,6 @@ L2605:	.DARK
 	BR	CKFOO
 
 
-;; FEE FIE FOE FOO (AND FUM). Advance to next state if given in proper order.
-;; Look up WD1 in section 3 of vocab to determine which word we've got.
-;; Last word zips the EGGS back to the Giant Room (unless already there).
-.FEE.:  O.NE.P	0, 9			; I don't know how
-	SUB	#FEE, R1
-	MOV	#FOOBAR, R5
-	CMP	(R5), R1
-	BEQ	1$
-	TST	(R5)
-	BEQ	.NOTH.
-	.RSPKR	118			; What's the matter, can't you read?  Now you'd best start over
-1$:	COM	(R5)			; FOOBAR = -(R1+1)
-	R1.NEP	3, 54			; Ok
-	CLR	(R5)			; FOOBAR = 0
-	CMPB	#92, PLACE-1-B.OBJ + EGGS		; #92
-	BEQ	.NOTH.
-	N.TOT	EGGS, 8256$
-	L.EQ	92, NOTHING	; EGGS
-8256$:	IF.NE	O.EGGS, 8253$
-	IF.NE	O.TROL, 8253$
-	N.PRP0	TROLL, 8253$
-	.SPROP	TROLL, 1	; Bring back TROLL if we steal the EGGS back from him before crossing
-8253$:	.MOVE	EGGS, 92
-	L.EQ	92, 8255$
-	;!!!O
-	N.HERE	EGGS, 8257$
-	.PSPEAK	EGGS, 1
-	RETURN
-8257$:	.PSPEAK	EGGS, 2
-	RETURN
-8255$:	.PSPEAK	EGGS, 0
-NOTHING:
-REPL.F:	RETURN
-
-
-
-
-ANAOB2:	MOV	VERB, R1
-	BNE	2$
-	.RSPEAK	87		; What do you want to do with the OBJ?
-	MOV	INP2, R5
-	MOVB	#'?, (R5)+
-	CLRB	(R5)+
-	.PUTS	$SPBUF    	; to print space
-	BR	CKHIN0
-2$:	R1.HI	FEE-1, .FEE.
-	ASL	R1
-	CLR	R0
-	MOV	OBJ, R5			; ZF processed by actions
-	JMP	@ACTION-2(R1)
-
-
-.NOTH.:.RSPKR	42			; Nothing happens
 
 L2609:
 ;;  Another way we can force an end to things is by having the lamp give out.
@@ -984,19 +967,26 @@ L11000:	MOV	#RTABLE, R4
 	.RSPEAK	132			; The sepulchral voice entones, "The cave is now closed."
 	MOV	#115, R1		; R1: NEWLOC
 	MOV	R1, OLDLOC
-	JMP	REPL2
-
-
-
-;; LAMP OFF
-.OFF.::	N.HERP	LAMP, 38	; You have no source of light
-	.SPROP	LAMP, 0
-	.RSPEAK	40		; Your lamp is now off
-	.DARK
-	BPL	REPL.5
-	.RSPKR	16		; It is now pitch dark.  If you proceed you will likely fall into a pit
-
-.OPEN2:	JMP	DNTUN2		;!!!o
+;; Can't leave Cave once it's closing (except by Main Office)
+;; R1: NEWLOC
+REPL2:	R1.HI	8, 71$
+	TST	R1
+	BEQ	71$
+	IF.NE	O.CLIN, 71$
+	MOV	LOC, R1
+	CALL	SPANIC
+;; See if a Dwarf has seen him and has come from where he wants to go.
+;; If so, the Dwarf's blocking his way. If coming from place forbidden to Pirate
+;; (Dwarves rooted in place) let him get out (and attacked).
+71$:	PUSH	#REPL3
+;; Forced motion or from place forbidden to Pirate
+IFFORB:	.FORCLOC
+	BCS	1$
+	MOV	LOC, R2
+	.NOPIR
+	BNE	9$
+1$:	SEC
+9$:	RETURN
 
 
 
@@ -1017,9 +1007,6 @@ L11000:	MOV	#RTABLE, R4
 	BEQ	8$
 	SOB	R3, 3$
 P59:	.RSPKR	59		; I can only tell you what you see
-
-REPL.5:	RETURN	;!!!O
-
 
 
 
@@ -1053,11 +1040,14 @@ P28:    .RSPKR	28		; There is nothing here with a lock!
 	MOV	#DOOR, R5
 3$:	N.AT	GRATE, 4$
 	MOV	#GRATE, R5
-4$:	N.HERE	CHAIN, 5$
+4$:	N.HERE	CHAIN, LOCK5
 	TST	R5
-	BNE	.OPEN2		; JMP	DNTUN2
-	MOV	#CHAIN, R5
-5$:	MOVB	R5, OBJ
+	BEQ	LOCK6		; JMP	DNTUN2
+
+.OPEN2:	JMP	DNTUN2		;!!!o
+
+LOCK6:	MOV	#CHAIN, R5
+LOCK5:	MOVB	R5, OBJ
 	BEQ	P28
 				; Fallback
 ;; LOCK, UNLOCK object. Special stuff for opening clam/oyster and for chain.
@@ -1069,7 +1059,7 @@ P28:    .RSPKR	28		; There is nothing here with a lock!
 1$:	N.AT	GRATE, 2$
 	MOV	#GRATE, OBJ
 2$:     O.EQ	0, 3$
-	.HERE	CHAIN, DNTUN4
+	.HERE	CHAIN, .OPEN2		; JMP	DNTUN2
 3$:	.TRYGE	CHAIN
 	O.EQ	0, P28
 L9040:	O.EQ	CLAM, L9046
@@ -1096,6 +1086,54 @@ L9043:	.PROP	GRATE
 PB120:	SUB	#2, R1			; I advise you to put down the
 PB122:  ADD	#122-CLAM, R1		; You don't have anything strong enough to open the
 SPKRET:	.RSPKR	0
+
+
+;; LAMP ON
+.ON.:	N.HERP	LAMP, 38	; You have no source of light
+	TST	(PC)+
+LIMIT:	.WORD	330		; Limit	lifetime of lamp
+	BLT	P184
+	.SPROP	LAMP, 1
+	.RSPEAK	39		; Your lamp is now on
+	.WZDARK	DESCR4
+REPL.5:	RETURN
+P184:	.RSPKR	200		; Your lamp has run out of power
+
+;; If no object, or object is BOTTLE, assume contents of BOTTLE.
+;; Special tests for pouring WATER or OIL on PLANT or RUSTY DOOR.
+.POUR.:	BEQ	1$
+	O.NE	BOTTLE, 2$
+1$:	.LIQ
+	MOV	R1, OBJ
+	MOV	R1, R5
+2$:	O.EQ	0, .OPEN2		; JMP	DNTUN2
+	N.TOTP	, 29			; You aren't carrying it!
+	O.EQ	OIL, 3$
+	O.NE.P	WATER, 78		; You can't pour that
+3$:	.SPROP	BOTTLE, 1
+	CLRB	PLACE-B.OBJ-1(R5)
+	.AT	PLANT, 10$
+	N.AT.P	DOOR, 77		; Your bottle is empty, and the ground is wet
+	.PROP	DOOR
+	CMP	R5, #OIL
+	BNE	9$
+	.SPROP	DOOR, 3
+9$:	.RSPKR	114			; The hinges are quite thoroughly rusted now and won't budge
+
+10$:	O.NE.P	WATER, 112		; The plant indignantly shakes the oil off its leaves and asks, "Water?"
+	.PROP	PLANT
+	CMPB	(R1)+, (R1)+		; += 2
+	MOVB	R1, 5$ + 3		; Print PLANT's property+1
+5$:	.PSPEAK	PLANT, 0
+	R1.LO	6, 12$
+	SUB	#6, R1
+12$:	MOVB	R1, 13$ + 3		; Self-modifying
+13$:	.SPROP	PLANT, 0
+	ASR	R1
+	MOVB	R1, 14$ + 3		; Self-modifying
+14$:	.SPROP	PLANT2, 0
+DESCR4:	JMP	DESCR2		;!!!o
+
 
 
 ;; Panic mode
@@ -1280,40 +1318,6 @@ DNTUN2:	JMP	DNTUND
 REPL.9:	BR	REPL.8
 
 
-;; If no object, or object is BOTTLE, assume contents of BOTTLE.
-;; Special tests for pouring WATER or OIL on PLANT or RUSTY DOOR.
-.POUR.:	BEQ	1$
-	O.NE	BOTTLE, 2$
-1$:	.LIQ
-	MOV	R1, OBJ
-	MOV	R1, R5
-2$:	O.EQ	0, DNTUN2
-	N.TOTP	, 29			; You aren't carrying it!
-	O.EQ	OIL, 3$
-	O.NE.P	WATER, 78		; You can't pour that
-3$:	.SPROP	BOTTLE, 1
-	CLRB	PLACE-B.OBJ-1(R5)
-	.AT	PLANT, 10$
-	N.AT.P	DOOR, 77		; Your bottle is empty, and the ground is wet
-	.PROP	DOOR
-	CMP	R5, #OIL
-	BNE	9$
-	.SPROP	DOOR, 3
-9$:	.RSPKR	114			; The hinges are quite thoroughly rusted now and won't budge
-
-10$:	O.NE.P	WATER, 112		; The plant indignantly shakes the oil off its leaves and asks, "Water?"
-	.PROP	PLANT
-	CMPB	(R1)+, (R1)+		; += 2
-	MOVB	R1, 5$ + 3		; Print PLANT's property+1
-5$:	.PSPEAK	PLANT, 0
-	R1.LO	6, 12$
-	SUB	#6, R1
-12$:	MOVB	R1, 13$ + 3		; Self-modifying
-13$:	.SPROP	PLANT, 0
-	ASR	R1
-	MOVB	R1, 14$ + 3		; Self-modifying
-14$:	.SPROP	PLANT2, 0
-	JMP	DESCR2		;!!!o
 
 
 
@@ -1938,14 +1942,6 @@ RPLROD:	N.TOT	ROD2, 2$
 	TST	(SP)+
 	.RSPKR	29				; You aren't carrying it!
 
-;; Forced motion or from place forbidden to Pirate
-IFFORB:	.FORCLOC
-	BCS	1$
-	MOV	LOC, R2
-	.NOPIR
-	BNE	RET.6
-1$:	SEC
-RET.6:	RETURN
 
 ;; Remove TROLLs
 RMTROL:	.MOVE	TROLL, 0
@@ -1953,7 +1949,7 @@ RMTROL:	.MOVE	TROLL, 0
 	.MOVE	TROLL2, 117			; PLAC(TROLL)
 	.MOVE	<TROLL2+OBJMAX>, 122		; FIXD(TROLL)
 	.JUGGLE	CHASM
-	RETURN
+RET.6:	RETURN
 
 .IF NE C$BK10
 ;; Common BK-0010 initialization code: for original imaged and saved image

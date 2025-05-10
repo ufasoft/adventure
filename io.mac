@@ -9,7 +9,7 @@
 .INCLUDE /macros.inc/
 
 .ASECT
-. = ^o12500
+. = ^o12400
 
 
 
@@ -365,7 +365,11 @@ RET.3:	RETURN
 
 .IF NE C$BK10
 
-GTLN10: MOV	#$BUF, R1
+PAGESZ	= 6
+
+GTLN10: MOVB	#PAGESZ, (PC)+
+PAGELN:	.WORD	PAGESZ		; Pager's count
+	MOV	#$BUF, R1
 	MOV	R1, CURPOS
 	CLRB	$F.HID			; Show Cursor
 	.P.CHR	'>
@@ -386,12 +390,8 @@ BKSAVE:	MOV	#A.FILE, R1
 	MOV	#OP.BR + <BKINIT-ABKSTR-2/2>, (R2)+
 	MOV	#BKINIT, (R2)+
 	JMP	$ASKEX			; Ask for filename and Execute file operation
-.ENDC ; C$BK10
 
 
-
-
-.IF NE C$BK10
 I.EMT:	PUSH	R1, R0
 	MOV	4(SP), R1
 	CMP	-(R1), #OP.EMT + ^o16
@@ -405,6 +405,11 @@ I.EMT:	PUSH	R1, R0
 	ADD	#^o100, R1
 	SOB	R0, 2$
 
+	DECB	PAGELN
+	BPL	14$
+	EMT	6		; Wait for any Key
+	MOVB	#PAGESZ, PAGELN
+14$:
 	MOV	#70000, R1
 	MOV	R1, $BAZVP
 6$:	MOV	9.*64.(R1), (R1)+		; Line Scroll
@@ -446,6 +451,9 @@ I.EMT:	PUSH	R1, R0
 3$:	POP	R0, R1
 	JMP	@(PC)+
 PRVEMT:	.WORD	$DEMT		; Previous EMT handler
+
+
+
 .ENDC	; C$BK10
 
 

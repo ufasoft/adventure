@@ -10,7 +10,7 @@
 .INCLUDE /macros.inc/
 
 .ASECT
-. = ^o14500
+. = ^o14400
 
 ; R4.OFF	= 0	; to avoid explicit 0
 R3.OFF	= 2
