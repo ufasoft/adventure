@@ -264,6 +264,7 @@ $BACK	= 58	; back in the main passage
 $HELP	= 59	; Do you need help getting out of
 $ROD	= 60	; A three foot black rod with a rusty star on an end lies nearby
 $OFFICE	= 61	; Main Office
+$VANIS	= 62	; vanishes into the gloom
 
 $WORDS::
 $NSEQ = 24
@@ -1230,6 +1231,7 @@ $NSEQ 	= 1
 .STATN	$HELP,	Do you need help getting out of
 .STATN	$ROD, 	A three foot black rod with a rusty star on an end lies nearby
 .STATN	$OFFICE, $CAP Main $CAP Office
+.STATN	$VANIS,	vanish $ES into the gloom
 
 
 $SAYS::
@@ -1402,8 +1404,7 @@ $FSTIK:	.EXCLA	90,	$NUM 1 of them get you
 .STATM	127,	$THRAR faint rustling noise $S from the darkness behind you
 .SENBA	SEN.S,	128,	Out from $THE SHADO. $S behind you pounc $ES a bearded pirate $EXC  $DQU 4 Har $COM har $COM
 .SEN			he chortl $ES $COM $DQU 19 I $.LL just take all this booty and hide it away with me
-.SEN			chest deep in the maze $EXC   He snatch $ES your treasure and vanish $ES into
-.SENBZ	SEN.S,	128,	the gloom
+.SENBZ	SEN.S,	128,	chest deep in the maze $EXC   He snatch $ES your treasure and $SUB $VANIS
 .SENTA	SEN.S,	129,	A sepulchral voice reverberat $ING through $THE CAVE. $COM says $COM $DQU 12 $CAP Cave closing
 .SENTZ	SEN.S,	129,	soon $DOT  All ADVNER $S exit immediately through $SUB $OFFICE
 .SENTA	SEN.S,	130,	A mysteri $OUS recorded voice groan $S into life and announces
@@ -1490,7 +1491,7 @@ $ROFF	= $NSEQ
 .SEN			turn toward them $COM the beam of your lamp fall $S across a bearded pirate $DOT
 .SEN			He is carrying a large chest $DOT $DQU 5 Shiver me timber $S $EXC he cri $ES $COM $DQU 18 I.VE
 .SEN			been spott $ED $EXC  I.D best hie meself off to the maze to hide me chest $EXC
-.SENBZ	SEN.S,	186,	With that $COM he vanish $ES into the gloom
+.SENBZ	SEN.S,	186,	With that $COM he $SUB $VANIS
 .STATM	187,	$SUB $DIM $DOT  YOU.D best go back for those batteries
 .STATM	188,	$SUB $DIM $DOT  I.M taking the liberty of replac $ING $THE BATTE.
 .STATM	189,	$SUB $DIM $COM and YOU.RE out of spare batteries $SUB $SWRAP
