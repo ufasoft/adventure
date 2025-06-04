@@ -127,7 +127,7 @@ HERE.1:	CMPB	(R5), LOC
 DROP.:  .OB2PL
 DROP0:	MOVB	(R4)+, R2
 	BEQ	DROP.3
-	CMPB	-(R2), -(R2)		; R2 -= 2
+	SUB	#2, R2
 	BR	DROP1
 DROPR.:	MOV	OBJ, R5
 	ADD	#PLACE-1-B.OBJ, R5	; Pointer in PLACE
@@ -397,7 +397,7 @@ MOVE.:	CLR	R1
 MOVE1:	MOVB	(R4)+, R2
 	MOV	R4, PC.OFF(SP)
 MOVER.:	MOVB	R1, 2$ + 2
-	CMPB	(R2)+, (R2)+     	; +=2 the second arg of .DROP is `place+2`
+	ADD	#2, R2     		; the second arg of .DROP is `place+2`
 	MOVB	R2, 2$ + 3
 	MOVB	PLACE-1-B.OBJ(R1), R0
 	BEQ	2$
