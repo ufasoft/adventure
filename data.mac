@@ -251,7 +251,7 @@ HINTLC:	.BYTE	4, 5, 8, 75, 25, 20		; The number of turns remained until Hint
 ;;   0	No DWARF stuff yet (wait until reaches Hall of Mists)
 ;;   1	Reached Hall of Mists, but hasn't met first dwarf
 ;;   2	Met first DWARF, others start moving, no KNIVES thrown yet
-;   3	A KNIFE has been thrown (first set always misses)
+;;   3	A KNIFE has been thrown (first set always misses)
 ;;   3+	DWARVEWS are mad (increases their accuracy)
 .EVEN
 DFLAG:	.BYTE	0

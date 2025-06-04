@@ -46,6 +46,9 @@
 
 
 .IF NE C$RT11
+	.	= ^o34
+	.WORD	I.TRAP
+
 	.	= $USRSP
 	.WORD	ASTKUP
 
@@ -200,7 +203,7 @@ L6030C:	BR	L6030A
 
 ;; This threatening little Dwarf is in the room with Him!
 NONPIR:	INC	DTOTAL		;6027
-	CMP	ODLOC-1(R3), (R2)
+	CMPB	ODLOC-1(R3), (R2)
 	BNE	L6030A
 	INC	(PC)+
 ATTACK:	.WORD	0
@@ -277,7 +280,7 @@ DTOTAL:	.WORD	0
 15$:	CMPB	DLOC-1(R3), R2		; R2: LOC
 	BNE	6002$
 	MOVB	#DALTLC, DLOC-1(R3)
-6002$:	MOV	DLOC-1(R3), ODLOC-1(R3)
+6002$:	MOVB	DLOC-1(R3), ODLOC-1(R3)
 	SOB	R3, 15$
 	.RSPEAK	10			; A little dwarf just walked around a corner, saw you, threw a little AXE
 	.DROP	AXE

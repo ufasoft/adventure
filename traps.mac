@@ -37,7 +37,6 @@ GPROPB:	ADD	#PROPS * 2 - PLACE, R5		;!!!o
 
 
 
-
 CARRY:	TSTB	PLACE-1-B.OBJ(R1)
 	BMI	9$
 	MOVB	#-2, FIXED-1-B.OBJ(R1)
@@ -175,7 +174,6 @@ SPROP.:	.OB2PL
 	BR	DROP2		; MOVB R2, (R5); BR E.4TRP
 
 
-
 IF.NE.:	BISB	(R4)+, R0
 	TSTB	B.BVAR(R0)
 	BR	LOGIC
@@ -271,11 +269,10 @@ CARRY.: .OB2PL
 E.4TRP:	MOV	R4, PC.OFF(SP)
 E.RTI:	MFPS	R3
 E.RTI3:	MOV	R5.OFF(SP), R5
+	BIC	#^o177400, R3		; To clear high byte of PSW
 	MOV	R3, R5.OFF(SP)
 	POP	R4, R3, R2, R0
 	RTI
-
-
 
 
 
@@ -301,7 +298,6 @@ BKRND1:	MOV	(PC)+, R2
 E4TR.2:	BR	E.4TRP
 
 
-
 PU16.:	CALL  	PSINT
 	DECB	EOW
 	BR	E.RTI
@@ -315,8 +311,7 @@ FORCE.:	PUSH	R1
 
 
 DARK.:	MOV	LOC, R2
-	CMP	#10, R2
-	BHIS	8$		; Locations 1..10 are sunlighted
+	R2.LO	11, 8$		; Locations 1..10 are sunlighted
 	JSR	R5, FNDLOC
 	.WORD	LIGHTS
 	BEQ	8$

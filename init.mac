@@ -15,7 +15,7 @@
 
 
 WELCOM:	.ASCII	|Welcome to Adventure !!|<C.NL>
-	.ASCII	|Ver. 2025.1 for RT-11/BK-0010/BK-0011M, ufasoft.com/adventure|<C.NL>
+	.ASCII	|Ver. 2025.2 for RT-11/BK-0010/BK-0011M, ufasoft.com/adventure|<C.NL>
 	.ASCIZ	|Would you like instructions?|
 
 INTRO:	.ASCII	|Somewhere nearby is Colossal Cave, where others have found fortunes in |
@@ -37,13 +37,14 @@ INTRO:	.ASCII	|Somewhere nearby is Colossal Cave, where others have found fortun
 
 INIT::
 .IF NE C$RT11
+	MOV	#RTINIT, $USRPC
 ;	.SETTOP	#IMGEND
 	.TRPSET	#AREA, #I.SPK
 .IFF
 	.TTYOUT	#C.EXTM			; Switch to Extended Memory Mode
 	MOV	#I.SPK1, 10
-.ENDC
 	MOV	#I.TRAP, 34
+.ENDC
 
 .IF NE C$1801
 	CLR	$TMLIM
@@ -226,7 +227,6 @@ I.SPK:
 	JMP 	I.SPK2
 
 RTINIT:	.TRPSET	#AREA, #I.SPK
-	MOV	#I.TRAP, 34
 	MOVB	#C.SP, $SPBUF
 	JMP	DESCR
 
@@ -236,101 +236,24 @@ RTRND:	.GTIM	#AREA, <#$BUF+20.>	; $BUF also used for DWARF motions
 
 
 
-;; Get filespec in RADIX-50
-R50FN:	MOV	R1, R3		; R3: begin of filename
-10$:	MOVB	(R1)+, R0
-	BEQ	11$
-	CMPB	R0, #'Z
-	BLO	10$
-	BICB	#^o40, -1(R1)	; To UPPERCASE
-	BR	10$
-11$:
-				; R1: end of filename
-	MOV	#$TMPFN.+13., R2	; temp buf
-	MOV	#12., R5
-	MOVB	R5, $TMPFN
-1$:	MOVB	#C.SP, -(R2)   	; init temp buf with spaces
-	SOB	R5, 1$
-
-;; Prepare filename
-	MOV	R3, R4		; R4: begin of filespec
-	MOV	#"DK, (R2)+	; default device is DK:
-    	MOVB	(R2), R0
-5$:	MOVB	R0, (R2)+
-4$:	CMP	R3, R1
-	BHIS	6$		; End of string
-	MOVB	(R3)+, R0
-	CMPB	R0, #':
-	BEQ	7$		; Copy Device name
-	CMPB	R0, #'.
-	BNE	5$
-	MOV	#$TMPFN+1+9., R2	; Jump to filename extension part
-	BR	4$
-
-7$:	MOV	#$TMPFN+1, R2	; R2: pointer to device part
-	MOV	#3, R5
-8$:	MOVB	(R4)+, R0
-	CMP	R4, R3
-	BLO	2$
-	MOVB	#C.SP, R0
-2$:	MOV	R0, (R2)+
-	SOB	R5, 8$
-	BR	4$		; R2: pointer to filename part
-
-6$:	MOV	#$TMPFN, R1
-;; INPUT: R1: Len-prefixed String
-;; RETURNS: On success CF=0, RADIX-50 string in $BUFOUT, R3 points behind the last word which is < (40. * 40.).
-;; Saves R1, R2
-A2R50:	MOVB	(R1)+, R5
-	BLE	8$		; strlen== 0 || strlen>127
-	ADD	R1, R5		; R5: end of string
-	MOV	#DEVBLK, R3
-3$:	CLR	(R3)+
-	MOV	#3, R2
-4$:	CMP	R1, R5
-	BEQ	9$		; CF=0 here (success)
-	MOV	-(R3), R0	; (R3) *= 40.
-	ASL	(R3)
-	ASL	(R3)
-	ADD	R0, (R3)
-	ASL	(R3)
-	ASL	(R3)
-	ASL	(R3)
-	MOVB	(R1)+, R0
-	CMPB	R0, #'Z
-	BHI	8$
-	CMPB	R0, #'A
-	BHIS	2$
-	SUB	#C.SP, R0
-	BEQ	5$
-	ADD	#C.SP, R0	;!!!O
-	MOV	#13., R4
-7$:	CMPB	R0, R50TAB-1(R4)
-	BNE	1$
-	MOV	R4, R0
-	ADD	#^o31 +'A, R0
-2$:	ADD	#1 - 'A, R0
-5$:	ADD	R0, (R3)+
-	SOB	R2, 4$
-	BR	3$
-1$:	SOB	R4, 7$
-8$:	SEC
-9$:	RETURN
-
-
 
 FDESC	= 5
+DEVBLK	= $BUF + 30.
 
-RTSAVE:	MOV	#$BUF, R1
+RTSAVE: MOV	#$BUF, R1
 	.GTLIN	R1, #FNPROM
+	MOV	SP, R3
+	.CSISPC	R1, #DEFEXT, R1
+	MOV	R3, SP			; Skip options
+	BCS	PERROR
+
+
+.REM &
 	MOV	#$BUF, R1
 	CALL	R50FN
 	BCS	PERROR
 
 
-	MOV	#RTINIT, $USRPC
-;	MOV	#ASTKUP, $USRSP
-.REM &
 	;.FETCH	#IMGEND, #DEVBLK
 	MOV	#UPPER / 512., R5	; R5: nBlocks
 	.ENTER	#AREA, #FDESC, #DEVBLK, R5
@@ -364,10 +287,11 @@ PERROR:	MOV	#SERROR, R5
 PRMSG:	JMP	PUTS
 
 AREA:	.WORD	0, 0, 0, 0, 0
-DEVBLK:	.RAD50	/DK FILNAMEXT/
+;!!!R DEVBLK:	.RAD50	/DK FILNAMEXT/
+DEFEXT:	.RAD50	/SAV         /
 
-SSAVED:	.ASCIZ	/Saved/<C.NL>
-SERROR:	.ASCIZ	/Error/<C.NL>
+SSAVED:	.ASCIZ	/Saved/<13.><10.>
+SERROR:	.ASCIZ	/Error/<13.><10.>
 R50TAB:	.ASCII	/*-=0123456789/
 
 LPROM:	.ASCII	/>/<200>	; prompt
