@@ -10,7 +10,7 @@
 .INCLUDE /macros.inc/
 
 .ASECT
-. = ^o14400
+. = ^o14440
 
 ; R4.OFF	= 0	; to avoid explicit 0
 R3.OFF	= 2
@@ -297,8 +297,14 @@ BKRND1:	MOV	(PC)+, R2
 	ADD	(R4)+, R1		; R1: rnd % n
 E4TR.2:	BR	E.4TRP
 
-
-PU16.:	CALL  	PSINT
+PI16.:	TST	R1
+	BPL	PU16.
+	.P.CHR	C.SP
+	.P.CHR	'-
+	NEG	R1
+	BR	PU16.1
+PU16.:	.P.CHR	C.SP
+PU16.1:	CALL  	PINT
 	DECB	EOW
 	BR	E.RTI
 
@@ -488,7 +494,7 @@ ARND:	.WORD						RTRND
 	.WORD	TOT.	, RCOND.	, LIQ.		, LIQLO.	, PSPEA.	, CMPLO.	, YESNO.	, MOVER.	; 30
 	.WORD	JUGGL.	, DARK.		, AT.		, FORCE.	, FORLO.	, L.HI.		, R2.HI.	, DROPR.	; 40
 	.WORD	PRP0.	, OB2PL.	, IFWD1.	, PUTS.		, PRPM.		, NMET.		, R1.HI.	, PRP1.		; 50
-	.WORD	TO.DR.		 													; 60
+	.WORD	TO.DR.	, PI16.	 													; 60
 
 
 

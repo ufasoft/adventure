@@ -457,7 +457,7 @@ NUMDIE	= . - 2				; Number of times killed so far (*2 + 79)
 	.SPROP	LAMP, 0
 	.DROP	LAMP, 1
 96$:	MOV	#OBJMAX, R3
-	MOV	OLDLC2, 5$ + 3
+	MOVB	OLDLC2, 5$ + 3
 97$:	N.TOT	-3, 98$
 5$:	.DROP	-3, 0
 98$:	SOB	R3, 97$
@@ -1917,15 +1917,15 @@ RSCORE:	CLR	R5			; R5: Score
 	CMP	R4, #CHEST-B.OBJ+1-FSTTRS
 	BLT	12$
 	BEQ	11$			; += 14 for CHEST
-	CMPB	(R5)+, (R5)+		; += 16 for >CHEST
-11$:	CMPB	(R5)+, (R5)+
+	ADD	#2, R5			; += 16 for >CHEST
+11$:	ADD	#2, R5
 12$:	SOB	R4, 1$
 
 	CMPB	PLACE-1-B.OBJ+MAGZIN, #108	; Did he come to Witt's End as he should?
 	BNE	3$
 	INC	R5
 3$:	MOV	R5, R1
-	.P.U16
+	.P.I16
 	.RSPKR	204			; out of a possible 350
 
 ;; Now look at how he finished and how far he got.

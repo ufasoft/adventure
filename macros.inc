@@ -81,6 +81,10 @@ $PRN4	= 166.		; PROP(n) != 4
 	TRAP	1
 .ENDM	.KEY
 
+;; Print SPACE and signed integer R1
+.MACRO	.P.I16
+	TRAP	^o61
+.ENDM	.P.I16
 
 ;; Print SPACE and unsigned integer R1
 .MACRO	.P.U16

@@ -265,6 +265,8 @@ $HELP	= 59	; Do you need help getting out of
 $ROD	= 60	; A three foot black rod with a rusty star on an end lies nearby
 $OFFICE	= 61	; Main Office
 $VANIS	= 62	; vanishes into the gloom
+$WANT	= 63	; do you want
+$REINC	= 64	; . Do you want me to try
 
 $WORDS::
 $NSEQ = 24
@@ -713,7 +715,7 @@ EWORDS::
 .W	upon	us	use	useful	usual
 .W	vain	valu	vanish	vanquish	vapor	vari	vast	vault
 .W	very	via	vic	visibility	visible	voice
-.W	wak	walls	wander	want	wants	warm	was	wash	watch	waterfall
+.W	wak	walls	wander	want	warm	was	wash	watch	waterfall
 .W	weight	we	well	were	western	wet
 .W	what	whatever	when	whereupon	while	whirlpool	white	who	whose
 .W	wicker	wide	widen	will	wind	window	wish	wisps	within	without	witt
@@ -1232,6 +1234,8 @@ $NSEQ 	= 1
 .STATN	$ROD, 	A three foot black rod with a rusty star on an end lies nearby
 .STATN	$OFFICE, $CAP Main $CAP Office
 .STATN	$VANIS,	vanish $ES into the gloom
+.STATN	$WANT,	Do you want
+.STATN	$REINC,	$DOT $SUB $WANT me to try
 
 
 $SAYS::
@@ -1313,7 +1317,7 @@ $NSEQ 	= 1
 $FMORE	= . - 5
 
 .STATM	67,	Blast $ING requires dynamite
-.QUEST	68,	Do you want the hint
+.QUEST	68,	$SUB $WANT the hint
 .STATM	69,	$THRIS no way to go that direction
 .STATM	70,	Your feet are now wet
 .STATM	71,	I think I just lost my appetite
@@ -1329,20 +1333,20 @@ $FMORE	= . - 5
 .STATM	79,	$SUB $KILL
 .QUEST	80,	Which way
 .SENTA	SEN.Q,	81,	Oh dear $COM you seem to have gotten yourself kill $ED $DOT  I might be able to
-.SEN			help you out $COM but I.VE never really done this before $DOT  Do you want me
-.SENTZ	SEN.Q,	81,	to try to reincarnate you
+.SEN			help you out $COM but I.VE never really done this before $SUB $REINC
+.SENTZ	SEN.Q,	81,	to reincarnate you
 .SENTA	SEN.S,	82,	All right $DOT  But DON.T blame me if something goes wr $DOT $DOT
 .SEN                    Poof $EXC $EXC
 .SEN			$YR engulf $ED in a cloud of orange smoke $DOT  Cough $ING and gasp $ING $COM
 .SENTZ	SEN.S,	82,	you emerge from the smoke and find $DOT $DOT
 .SENTA	SEN.Q,	83,	You clumsy oaf $COM YOU.VE done it again $EXC  $SUB $IDNKN how long I can
-.SENTZ	SEN.Q,	83,	keep this up $DOT  Do you want me to try reinc2 $ING you again $QUE
-.SENTA	SEN.S,	84,	Okay $COM now where did I put my orange smoke $QUE  Poof $EXC
+.SENTZ	SEN.Q,	83,	keep this up $SUB $REINC reinc2 $ING you again
+.SENTA	SEN.S,	84,	Okay $COM now where did I put my orange smoke $QUE $DOT $DOT Poof $EXC
 .SENTZ	SEN.S,	84,	Everything disappears in a dense cloud of orange smoke
 .SENTA	SEN.Q,	85,	Now YOU.VE really done it $EXC  I.M out of orange smoke $EXC  You DON.T expect
-.SENTZ	SEN.Q,	85,	me to do a decent reinc1 $TION without any orange smoke $COM do you $QUE
+.SENTZ	SEN.Q,	85,	me to do a decent reinc1 $TION without any orange smoke $COM do you
 .EXCLA	86,	Okay $COM if YOU.RE so smart $COM do it yourself $EXC  I.M leav $ING
-.STATN	87,	What do you want to do with the
+.STATN	87,	What $SUB $WANT to do with the
 $FDTOT:	.STATM	88, 	$THRAR $NUM 1 threatening little dwarves in the room with you
 $FKNIV:	.EXCLA	89,	$NUM 1 of them throw knives at you
 $FSTIK:	.EXCLA	90,	$NUM 1 of them get you
@@ -1367,7 +1371,7 @@ $FSTIK:	.EXCLA	90,	$NUM 1 of them get you
 .STATM	99,	$ASCIN 'R 'T 'F 256-'M				; On INFO, HELP
 .STATM	100,	$SUB $IDNKN how					; On SWIM
 .STATM	101,	$THE SNAKE. has now devour $ED your bird
-.STATM	102,	There $.S nothing here it wants to eat $PAR 3 except perhaps you
+.STATM	102,	There $.S nothing here it want $S to eat $PAR 3 except perhaps you
 .EXCLA	103,	You fool $COM dwarves eat only coal $EXC  Now YOU.VE made him REALLY mad $EXC
 .STATM	104,	You have nothing in which to carry it
 .STATM	105,	$SUB $BOTTL already full
@@ -1462,7 +1466,7 @@ $FSTIK:	.EXCLA	90,	$NUM 1 of them get you
 .SENTZ	SEN.S,	163,	scurries away $DOT  $THE BEAR. soon give $S up the pursuit and wander $S back
 .STATM	164,	$THE AXE. miss $ES and lands near $THE BEAR. where you CAN.T get at it
 .QUEST	165,	With what $QUE Your bare hands $QUE  Against $UCS HIS bear hands
-.STATM	166,	$THE BEAR. is confused $COM he only wants to be your friend
+.STATM	166,	$THE BEAR. is confused $COM he only want $S to be your friend
 .EXCLA	167,	For cry $ING out loud $COM the poor thing is already dead
 .SENTA	SEN.S,	168,	$THE BEAR. eager $LY wolfs down your food $COM after which he seems to calm
 .SENTZ	SEN.S,	168,	down CNSDLY and even becom $ES rather friend $LY

@@ -15,7 +15,7 @@
 
 
 WELCOM:	.ASCII	|Welcome to Adventure !!|<C.NL>
-	.ASCII	|Ver. 2025.3 for RT-11/BK-0010/BK-0011M, ufasoft.com/adventure|<C.NL>
+	.ASCII	|Ver. 2025.4 for RT-11/BK-0010/BK-0011M, ufasoft.com/adventure|<C.NL>
 	.ASCIZ	|Would you like instructions?|
 
 INTRO:	.ASCII	|Somewhere nearby is Colossal Cave, where others have found fortunes in |
